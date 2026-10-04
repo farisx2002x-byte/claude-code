@@ -1,0 +1,10 @@
+numpy
+pandas
+scipy
+pyproj
+pyarrow
+openpyxl
+ortools>=9.10
+streamlit>=1.46
+pydeck
+pytest
