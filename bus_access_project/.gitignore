@@ -1,0 +1,9 @@
+work/
+output/*.gpkg
+output/*.xlsx
+output/*.kml
+output/سجل_التشغيل.txt
+settings.json
+*.kml.bak
+__pycache__/
+.pytest_cache/

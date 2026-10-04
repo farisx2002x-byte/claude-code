@@ -1,0 +1,14 @@
+geopandas
+pyogrio
+shapely
+rasterio
+scikit-image
+skan
+networkx
+scipy
+openpyxl
+pyarrow
+pytest
+ortools>=9.10
+streamlit>=1.46
+pydeck

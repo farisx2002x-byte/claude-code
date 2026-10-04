@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>خريطة وصول الباص — جدة</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#fff;--fg:#1b1f23;--card:#f4f6f8;--bd:#d0d7de;--ok:#2e9e4f;--mid:#e0a800;--hard:#d1383d}
+@media (prefers-color-scheme:dark){:root{--bg:#111418;--fg:#e6e8eb;--card:#1b2026;--bd:#2f3740}}
+html,body{height:100%;margin:0;font-family:Arial,Tahoma,sans-serif;background:var(--bg);color:var(--fg)}
+#map{position:absolute;inset:0 0 0 320px}
+#side{position:absolute;top:0;bottom:0;right:0;left:auto;width:320px;box-sizing:border-box;padding:12px;overflow:auto;background:var(--card);border-left:1px solid var(--bd)}
+#map{right:320px;left:0}
+h1{font-size:16px;margin:0 0 8px}
+.cnt{display:flex;gap:6px;margin:8px 0}
+.cnt button{flex:1;border:2px solid var(--bd);border-radius:8px;padding:8px 4px;background:var(--bg);color:var(--fg);cursor:pointer;font-size:13px}
+.cnt button.off{opacity:.35}
+.cnt b{display:block;font-size:18px}
+label{display:block;margin:6px 0;font-size:13px}
+select{width:100%;padding:5px;background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:6px}
+.note{font-size:11px;opacity:.7;margin-top:10px}
+@media (max-width:700px){#side{position:static;width:auto}#map{position:relative;height:60vh;inset:auto}}
+</style>
+</head>
+<body>
+<div id="side">
+<h1>وصول الباص للطلاب</h1>
+<div>المركبة:
+<select id="veh"><option value="L">باص كبير</option><option value="M">باص متوسط</option><option value="S">فان</option><option value="R">الموصى بها</option></select></div>
+<div class="cnt" id="cnt"></div>
+<div>المدرسة: <select id="school"><option value="-1">كل المدارس</option></select></div>
+<label><input type="checkbox" id="pk" checked> نقاط التجميع</label>
+<label><input type="checkbox" id="ob"> العوائق</label>
+<label><input type="checkbox" id="lc"> الثقة المنخفضة فقط</label>
+<label><input type="checkbox" id="sc" checked> المدارس</label>
+<label><input type="checkbox" id="di"> حدود الأحياء</label>
+<label><input type="checkbox" id="mr"> الطرق الرئيسية</label>
+<div class="note">لا تحتوي الخريطة على أسماء أو أرقام طلاب: المستوى والمدرسة والمرحلة والأسباب فقط. النتائج تقديرية وتحتاج تحقق ميداني.</div>
+</div>
+<div id="map"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const D = /*DATA*/null;
+const LV=["سهل","متوسط","صعب"], COL=["#2e9e4f","#e0a800","#d1383d"], REC=["باص كبير","باص متوسط","فان","نقطة تجميع"];
+const map=L.map('map',{preferCanvas:true}).setView([21.54,39.19],11);
+const dark=matchMedia('(prefers-color-scheme:dark)').matches;
+L.tileLayer(`https://{s}.basemaps.cartocdn.com/${dark?'dark_all':'light_all'}/{z}/{x}/{y}{r}.png`,{attribution:'© OpenStreetMap © CARTO',maxZoom:19}).addTo(map);
+const gStu=L.layerGroup().addTo(map),gPk=L.layerGroup().addTo(map),gOb=L.layerGroup(),gSc=L.layerGroup().addTo(map),gDi=L.layerGroup(),gMr=L.layerGroup();
+const on=[true,true,true];
+const $=id=>document.getElementById(id);
+D.schools_list.forEach((s,i)=>{const o=document.createElement('option');o.value=i;o.textContent=s;$('school').appendChild(o)});
+// r = [lat,lon,levL,levM,levS,rec,school,stage,conf,reason]
+function level(r){const v=$('veh').value; return v==='R'?(r[5]===3?2:[r[2],r[3],r[4]][r[5]]):({L:r[2],M:r[3],S:r[4]}[v]);}
+function draw(){
+  gStu.clearLayers();const c=[0,0,0],sch=+$('school').value,lc=$('lc').checked;
+  D.students.forEach(r=>{
+    if(sch>=0&&r[6]!==sch)return; if(lc&&r[8]!==0)return;
+    const l=level(r); c[l]++; if(!on[l])return;
+    L.circleMarker([r[0],r[1]],{radius:4,color:COL[l],weight:1,fillOpacity:.75}).bindPopup(
+      `<b>${LV[l]}</b><br>${D.schools_list[r[6]]}<br>${D.stages[r[7]]} | ${REC[r[5]]}<br>${r[9]}`).addTo(gStu);
+  });
+  $('cnt').innerHTML='';
+  LV.forEach((n,i)=>{const b=document.createElement('button');b.style.borderColor=COL[i];b.className=on[i]?'':'off';
+    b.innerHTML=`<b>${c[i].toLocaleString('ar')}</b>${n}`;b.onclick=()=>{on[i]=!on[i];draw()};$('cnt').appendChild(b)});
+}
+D.pickups.forEach(p=>L.circleMarker([p[0],p[1]],{radius:6,color:'#6a1b9a',fillColor:'#ce93d8',fillOpacity:.9}).bindPopup(`نقطة تجميع<br>${p[2]} طالب، أبعد مشي ${p[3]} م`).addTo(gPk));
+D.obstacles.forEach(o=>L.circleMarker([o[0],o[1]],{radius:5,color:'#000',fillColor:o[2]==='deadend'?'#ff7043':'#ffd54f',fillOpacity:.9}).bindPopup({turn_sharp:'التفاف حاد',turn_vsharp:'التفاف حاد جداً',deadend:'شارع مسدود'}[o[2]]+(o[3]?`<br>رجوع للخلف ${o[3]} م`:'')).addTo(gOb));
+D.schools.forEach(s=>L.marker([s[0],s[1]],{title:s[2]}).bindPopup(s[2]).addTo(gSc));
+D.districts.forEach(d=>L.polyline(d,{color:'#607d8b',weight:1,fill:false}).addTo(gDi));
+D.major.forEach(m=>L.polyline(m,{color:'#1565c0',weight:2,opacity:.6}).addTo(gMr));
+[['pk',gPk],['ob',gOb],['sc',gSc],['di',gDi],['mr',gMr]].forEach(([id,g])=>$(id).onchange=e=>e.target.checked?g.addTo(map):map.removeLayer(g));
+['veh','school','lc'].forEach(id=>$(id).onchange=draw);
+draw();
+</script>
+</body>
+</html>
