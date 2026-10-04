@@ -1,0 +1,7 @@
+[server]
+maxUploadSize = 1024        # ملف الاستعمالات (gpkg) ~223 MB
+[theme]
+primaryColor = "#1565c0"
+font = "sans serif"
+[browser]
+gatherUsageStats = false

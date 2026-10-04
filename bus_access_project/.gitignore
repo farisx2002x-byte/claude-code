@@ -7,3 +7,5 @@ settings.json
 *.kml.bak
 __pycache__/
 .pytest_cache/
+demo_state/
+inputs/

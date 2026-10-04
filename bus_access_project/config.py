@@ -3,15 +3,42 @@ import json
 import os
 from pathlib import Path
 
-VERSION = "3.0.0"
+VERSION = "3.1.0"
 
 # ───────────── المسارات ─────────────
 PROJECT = Path(__file__).resolve().parent
-# مجلد البيانات الأساسية (يتغير بمتغير البيئة BUS_DATA_DIR)
-DATA_DIR = Path(os.environ.get("BUS_DATA_DIR", r"C:\Users\welcome\Downloads"))
-WORK = PROJECT / "work"
-OUTPUT = PROJECT / "output"
-LOCAL_DATA = PROJECT / "data"
+SETTINGS_JSON = PROJECT / "settings.json"
+
+
+def read_settings():
+    """settings.json تكتبه الواجهة (يُقرأ كل مرة، فيتحدث بدون إعادة تشغيل)."""
+    try:
+        return json.loads(SETTINGS_JSON.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def resolve_data_dir():
+    """مجلد المدخلات: متغير البيئة BUS_DATA_DIR، ثم settings.json (DATA_DIR)، ثم inputs/ داخل المشروع لو فيه بيانات،
+    وإلا الافتراضي (تنزيلات المستخدم على Windows)."""
+    env = os.environ.get("BUS_DATA_DIR")
+    if env:
+        return Path(env)
+    s = read_settings().get("DATA_DIR")
+    if s:
+        return Path(s)
+    if (PROJECT / "inputs").exists():
+        return PROJECT / "inputs"
+    return Path(r"C:\Users\welcome\Downloads")
+
+
+DATA_DIR = resolve_data_dir()
+# وضع التجربة: BUS_DEMO_DIR يحوّل كل المسارات لمجلد منفصل (بيانات اصطناعية، ما تلمس البيانات الحقيقية)
+_DEMO = os.environ.get("BUS_DEMO_DIR")
+_BASE = Path(_DEMO) if _DEMO else PROJECT
+WORK = _BASE / "work"
+OUTPUT = _BASE / "output"
+LOCAL_DATA = _BASE / "data" if _DEMO else PROJECT / "data"
 
 STUDENTS_KML = DATA_DIR / "all_students.kml"
 LANDUSE_GPKG = DATA_DIR / "Jeddah_LandUse_GIS" / "Jeddah_LandUse_Zones" / "Jeddah_LandUse_Zones.gpkg"
@@ -20,8 +47,9 @@ ROADS_INNER = "KSA_Roads/Roads.shp"
 FLEET_XLSX = DATA_DIR / "المدارس كاملة.xlsx"
 SCHOOLS_ZIP = LOCAL_DATA / "schools.zip"
 SCHOOL_LOOKUP = LOCAL_DATA / "school_lookup.csv"
-FLEET_ALIAS = LOCAL_DATA / "fleet_alias.csv"
-SETTINGS_JSON = PROJECT / "settings.json"
+FLEET_ALIAS = (PROJECT / "data" / "fleet_alias.csv") if not _DEMO else LOCAL_DATA / "fleet_alias.csv"
+if _DEMO:   # بيانات التجربة كلها داخل مجلد التجربة
+    FLEET_XLSX = _BASE / "fleet.xlsx"
 
 # ───────────── أعداد مرجعية (للتأكد من الملفات) ─────────────
 EXPECTED = {"students": 8729, "zones": 111116, "districts": 226, "schools": 79, "fleet_buses": 201}
@@ -138,12 +166,7 @@ EDITABLE = ["SCHOOL_ARRIVAL", "MAX_RIDE_MIN", "PEAK_FACTOR", "LOAD_FACTOR", "STO
 
 def _apply_settings():
     """قراءة settings.json اللي تكتبه اللوحة وتطبيقه على المتغيرات المسموحة."""
-    if not SETTINGS_JSON.exists():
-        return
-    try:
-        s = json.loads(SETTINGS_JSON.read_text(encoding="utf-8"))
-    except Exception:
-        return
+    s = read_settings()
     g = globals()
     for k in EDITABLE:
         if k in s and type(s[k]) in (int, float, str):

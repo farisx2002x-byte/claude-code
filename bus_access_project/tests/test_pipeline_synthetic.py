@@ -10,35 +10,7 @@ from shapely.geometry import LineString, box
 
 import config as C
 
-OX, OY = 520000.0, 2384000.0   # بداية مربع (مضاعف 2000) قرب جدة
-
-
-def make_data(work):
-    rng = np.random.default_rng(1)
-    polys = []
-    for i in range(8):
-        for j in range(5):
-            x, y = OX + i * 74, OY + 40 + j * 74
-            polys.append(box(x, y, x + 60, y + 60))
-    polys.append(box(OX - 100, OY, OX + 800, OY + 7))
-    polys.append(box(OX - 100, OY + 33, OX + 800, OY + 40))
-    parcels = gpd.GeoDataFrame({"LU_ZONE": ["سكني"] * len(polys)}, geometry=polys, crs=C.CRS_UTM)
-    parcels.to_parquet(work / "parcels.parquet")
-    roads = gpd.GeoDataFrame({"fclass": ["primary"], "oneway": ["B"]},
-                             geometry=[LineString([(OX - 100, OY + 20), (OX + 800, OY + 20)])], crs=C.CRS_UTM)
-    roads.to_parquet(work / "roads.parquet")
-    dist = gpd.GeoDataFrame({"ARNAME": ["حي تجريبي"]}, geometry=[box(OX - 50, OY - 50, OX + 700, OY + 450)], crs=C.CRS_UTM)
-    dist.to_parquet(work / "districts.parquet")
-    rows = []
-    for k in range(120):
-        sx = OX + 67 + 74 * rng.integers(0, 7) + rng.uniform(-3, 3)
-        sy = OY + rng.uniform(50, 380)
-        rows.append(dict(idx=k, name=f"طالب {k}", sid=str(k), school="مدرسة أ" if k % 2 else "مدرسة ب",
-                         stage=["ابتدائي", "متوسط", "ثانوي"][k % 3], guardian="", phone="", address="",
-                         lon=39.2, lat=21.5, x=sx, y=sy))
-    pd.DataFrame(rows).to_parquet(work / "students.parquet")
-    pd.DataFrame([dict(name="مدرسة أ", lon=0, lat=0, x=OX + 67 + 74, y=OY + 107 + 74),
-                  dict(name="مدرسة ب", lon=0, lat=0, x=OX + 67 + 222, y=OY + 107 + 148)]).to_parquet(work / "schools.parquet")
+from src.demo_data import make_data
 
 
 @pytest.fixture()
@@ -55,10 +27,8 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(C, "VRP_TIME_MIN", 2)
     monkeypatch.setattr(C, "VRP_TIME_MAX", 3)
     make_data(work)
-    pd.DataFrame({"student_school": ["مدرسة أ", "مدرسة ب"], "official_name": ["مدرسة أ", "مدرسة ب"],
-                  "match": ["exact", "exact"]}).to_csv(data / "school_lookup.csv", index=False, encoding="utf-8-sig")
-    pd.DataFrame({"اسم المدرسة": ["مدرسة أ", "مدرسة ب"], "المقاعد": [72, 26], "النوع": ["G9", "COUNTY"],
-                  "اسم السائق": ["س", "ص"]}).to_excel(tmp_path / "fleet.xlsx", index=False)
+    from src.demo_data import make_side_files
+    make_side_files(data, tmp_path / "fleet.xlsx", data / "school_lookup.csv")
     return work, out
 
 
