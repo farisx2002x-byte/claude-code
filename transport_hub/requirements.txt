@@ -8,3 +8,6 @@ ortools>=9.10
 streamlit>=1.46
 pydeck
 pytest
+fastapi
+httpx
+uvicorn

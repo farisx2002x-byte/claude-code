@@ -60,6 +60,22 @@ def collect(sig_):
         if st_df is not None:
             vals["taxi_stand_cov"] = tstands.stand_coverage(trips, st_df[["x", "y"]].to_numpy(), 300)
         tables["taxi_kpis"] = pd.DataFrame({"المؤشر": list(k), "القيمة": list(k.values())})
+    avl, apc, reg = U.get("avl"), U.get("apc"), U.get("register")
+    if avl is not None:
+        from transport_hub.ops import performance as P
+        a = P.clean_avl(avl)
+        vals["ops_otp"] = 100 * float(1 - (a["delay_s"] > P.LATE_S).mean() - (a["delay_s"] < -P.EARLY_S).mean())
+        _, r = P.headway_regularity(a)
+        if len(r):
+            vals["ops_ewt"] = float(r["ewt_min"].mean())
+    if apc is not None:
+        from transport_hub.ops import performance as P
+        s_ = P.apc_summary(P.clean_apc(apc), 72)
+        vals["ops_crowded"] = float(s_["crowded_trips_pct"].mean())
+    if reg is not None:
+        from transport_hub.ops import fleetmgmt as F
+        m = F.maintenance(F.clean_register(reg), 200)
+        vals["fleet_overdue"] = 100 * float((m["status"] == "متأخرة").mean())
     vals.update(_school_kpis())
     return vals, tables
 

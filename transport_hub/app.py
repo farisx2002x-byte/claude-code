@@ -9,12 +9,14 @@ if str(ROOT) not in sys.path:
 
 import streamlit as st  # noqa: E402
 
-from transport_hub.ui import (p_admin, p_attractors, p_data, p_home, p_school, p_siting, p_taxi, p_transit)  # noqa: E402
+from transport_hub.ui import (p_admin, p_attractors, p_data, p_home, p_ops, p_perf, p_school, p_siting, p_taxi, p_transit)  # noqa: E402
 
 PAGES = [
     ("الرئيسية", "🏠", "home", p_home.render),
     ("البيانات", "🗂️", "data", p_data.render),
     ("النقل العام", "🚌", "transit", p_transit.render),
+    ("التشغيل والجدولة", "🛠️", "ops", p_ops.render),
+    ("الأداء الفعلي", "⏱️", "performance", p_perf.render),
     ("التاكسي", "🚕", "taxi", p_taxi.render),
     ("النقل المدرسي", "🎒", "school", p_school.render),
     ("اختيار المواقع", "📍", "siting", p_siting.render),

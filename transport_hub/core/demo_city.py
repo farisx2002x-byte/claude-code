@@ -135,3 +135,46 @@ def taxi_stands():
 
 def build_all():
     return dict(population=population(), poi=pois(), gtfs=gtfs_feed(), trips=taxi_trips(), stands=taxi_stands())
+
+
+def avl_apc(feed_tables, seed=5, days=5):
+    """بيانات تتبع وركاب اصطناعية على جدول GTFS التجريبي: تأخير يتراكم على طول الخط وأكثر في الذروة، مع تكدّس عشوائي، وركاب حسب الساعة."""
+    rng = np.random.default_rng(seed)
+    st, trips = feed_tables["stop_times"].copy(), feed_tables["trips"]
+    st = st.merge(trips[["trip_id", "route_id"]], on="trip_id")
+    def sec(s):
+        h, m, x = s.split(":")
+        return int(h) * 3600 + int(m) * 60 + int(x)
+    st["sched"] = st["departure_time"].map(sec)
+    keep = rng.random(st["trip_id"].nunique()) < 0.35            # عيّنة رحلات
+    ids = st["trip_id"].unique()[keep]
+    st = st[st["trip_id"].isin(ids)]
+    avl_rows, apc_rows = [], []
+    for day in range(days):
+        date = (pd.Timestamp("2025-03-02") + pd.Timedelta(days=day)).date().isoformat()
+        for tid, g in st.groupby("trip_id"):
+            g = g.sort_values("stop_sequence")
+            hour = g["sched"].iloc[0] // 3600
+            rush = 1.6 if hour in (7, 8, 16, 17) else 1.0
+            base = rng.normal(0, 40)
+            drift = rng.gamma(2.0, 12 * rush, len(g)).cumsum() * rng.choice([0.4, 1.0, 1.6])
+            act = g["sched"].to_numpy() + base + drift
+            for sid, sc, ac, seq in zip(g["stop_id"], g["sched"], act, g["stop_sequence"]):
+                avl_rows.append(dict(date=date, route_id=g["route_id"].iloc[0], trip_id=tid, stop_id=sid, scheduled=int(sc), actual=int(ac)))
+            n = len(g)
+            lam = (14 if hour in (7, 8, 16, 17) else 6) * np.sin(np.linspace(0.2, np.pi - 0.2, n)) + 1
+            b = rng.poisson(lam)
+            a = np.minimum(np.concatenate([[0], np.cumsum(b)[:-1] // 3]), rng.poisson(lam * 0.9))
+            for sid, bb, aa in zip(g["stop_id"], b, a):
+                apc_rows.append(dict(date=date, route_id=g["route_id"].iloc[0], trip_id=tid, stop_id=sid, boardings=int(bb), alightings=int(aa)))
+    return pd.DataFrame(avl_rows), pd.DataFrame(apc_rows)
+
+
+def vehicle_register(n=45, seed=9):
+    rng = np.random.default_rng(seed)
+    year = rng.integers(2012, 2025, n)
+    odo = ((2025 - year) * rng.uniform(40_000, 70_000, n)).astype(int)
+    last = odo - rng.integers(500, 14_000, n)
+    ld = pd.Timestamp("2025-03-01") - pd.to_timedelta(rng.integers(5, 220, n), "D")
+    return pd.DataFrame({"vehicle_id": range(n), "type": rng.choice(["باص كبير", "باص متوسط"], n, p=[0.8, 0.2]), "seats": rng.choice([72, 26], n, p=[0.8, 0.2]),
+                         "year": year, "odometer_km": odo, "last_service_km": last, "last_service_date": ld.date})

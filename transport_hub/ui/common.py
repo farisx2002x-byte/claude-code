@@ -73,7 +73,7 @@ def require(*names, what=""):
     out = {n: get(n) for n in names}
     miss = [n for n, v in out.items() if v is None]
     if miss:
-        labels = {"population": "السكان", "poi": "نقاط الجذب", "gtfs": "جداول النقل العام (GTFS)", "trips": "رحلات التاكسي", "stands": "مواقف التاكسي"}
+        labels = {"population": "السكان", "poi": "نقاط الجذب", "gtfs": "جداول النقل العام (GTFS)", "trips": "رحلات التاكسي", "stands": "مواقف التاكسي", "avl": "بيانات التتبع AVL", "apc": "عدّادات الركاب APC", "register": "سجل الأسطول"}
         empty(f"هذه الصفحة تحتاج: {'، '.join(labels.get(m, m) for m in miss)}.<br>أضفها من صفحة «البيانات» أو حمّل المدينة التجريبية. {what}")
         return None
     return out

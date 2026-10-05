@@ -58,3 +58,10 @@ def test_siting_all_methods(ws_env):
     for kind in ["موقف تاكسي", "مستودع حافلات"]:
         at.selectbox(key="hub_s_kind").set_value(kind).run()
         assert not at.exception, (kind, [e.value for e in at.exception])
+
+
+@pytest.mark.parametrize("page", ["p_ops", "p_perf"])
+def test_ops_pages_with_demo_data(ws_env, page):
+    at = AppTest.from_string(script(page), default_timeout=300).run()
+    assert not at.exception, (page, [e.value for e in at.exception])
+    assert len(at.markdown) > 0

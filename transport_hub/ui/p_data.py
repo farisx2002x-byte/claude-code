@@ -7,6 +7,8 @@ import streamlit as st
 
 from transport_hub.core import data as D
 from transport_hub.core import demo_city, geo
+from transport_hub.ops import fleetmgmt as F
+from transport_hub.ops import performance as P
 from transport_hub.transit import gtfs
 from transport_hub.ui import common as U
 
@@ -16,6 +18,9 @@ TEMPLATES = {
     "رحلات التاكسي": pd.DataFrame({"pickup_time": ["2025-03-02 08:15"], "pickup_lon": [39.17], "pickup_lat": [21.54], "dropoff_lon": [39.19], "dropoff_lat": [21.56],
                                    "fare": [22.5], "distance_km": [7.2], "duration_min": [18], "vehicle_id": [12], "wait_min": [5]}),
     "مواقف التاكسي": pd.DataFrame({"name": ["موقف 1"], "lon": [39.17], "lat": [21.54]}),
+    "تتبع المركبات AVL": pd.DataFrame({"date": ["2025-03-02"], "route_id": ["R1"], "trip_id": ["R1_0_21600"], "stop_id": ["S_R1_0"], "scheduled": ["06:00:30"], "actual": ["06:02:10"]}),
+    "ركاب APC": pd.DataFrame({"date": ["2025-03-02"], "route_id": ["R1"], "trip_id": ["R1_0_21600"], "stop_id": ["S_R1_0"], "boardings": [12], "alightings": [0]}),
+    "سجل الأسطول": pd.DataFrame({"vehicle_id": [1], "type": ["باص كبير"], "seats": [72], "year": [2020], "odometer_km": [180000], "last_service_km": [172000], "last_service_date": ["2025-01-15"]}),
 }
 
 
@@ -38,6 +43,10 @@ def load_demo():
     w.save_obj("gtfs", d["gtfs"])
     w.save_df("trips", D.clean_trips(d["trips"], p))
     w.save_df("stands", p.attach(d["stands"]))
+    avl, apc = demo_city.avl_apc(d["gtfs"])
+    w.save_df("avl", avl)
+    w.save_df("apc", apc)
+    w.save_df("register", demo_city.vehicle_register())
     w.log("demo_loaded")
     st.cache_data.clear()
 
@@ -56,7 +65,7 @@ def render():
         st.cache_data.clear()
         st.rerun()
 
-    tabs = st.tabs(["السكان", "نقاط الجذب", "النقل العام (GTFS)", "التاكسي", "قوالب", "فحص الجودة"])
+    tabs = st.tabs(["السكان", "نقاط الجذب", "النقل العام (GTFS)", "التاكسي", "التشغيل", "قوالب", "فحص الجودة"])
     with tabs[0]:
         st.caption("الأعمدة المطلوبة: zone_id, pop, lon, lat. اختيارية: name, district, jobs, students, low_income.")
         up = st.file_uploader("ملف السكان (CSV)", type="csv", key="hub_up_pop")
@@ -110,9 +119,24 @@ def render():
         if up2 is not None and st.button("اعتمد المواقف", key="hub_ok_stands") and U.proj() is not None:
             w.save_df("stands", U.proj().attach(_read_csv(up2))); st.cache_data.clear(); st.rerun()
     with tabs[4]:
+        st.caption("بيانات التشغيل الفعلية: تتبع المركبات AVL، عدّادات الركاب APC، وسجل الأسطول. كلها اختيارية وتفعّل صفحات الأداء الفعلي والتشغيل.")
+        for key, label, cols, fn in (("avl", "تتبع المركبات AVL (CSV)", "date, route_id, trip_id, stop_id, scheduled, actual", P.clean_avl),
+                                     ("apc", "عدّادات الركاب APC (CSV)", "date, route_id, trip_id, stop_id, boardings, alightings", P.clean_apc),
+                                     ("register", "سجل الأسطول (CSV)", "vehicle_id, type, seats, year, odometer_km, last_service_km, last_service_date", F.clean_register)):
+            st.caption(f"{label}: {cols}")
+            up = st.file_uploader(label, type="csv", key=f"hub_up_{key}")
+            if up is not None and st.button(f"اعتمد: {label}", key=f"hub_ok_{key}"):
+                try:
+                    raw = _read_csv(up)
+                    fn(raw)                                # فحص الأعمدة
+                    w.save_df(key, raw)
+                    st.cache_data.clear(); st.rerun()
+                except Exception as e:
+                    st.error(str(e))
+    with tabs[5]:
         for name, df in TEMPLATES.items():
             U.download_df(f"قالب: {name}", df, f"template_{name}.csv", f"hub_tpl_{name}")
-    with tabs[5]:
+    with tabs[6]:
         feed = U.feed_obj()
         rep = D.quality_report(U.get("population"), U.get("poi"), U.get("trips"), gtfs.validate(feed) if feed else None)
         if rep.empty:
