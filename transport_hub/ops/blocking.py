@@ -8,6 +8,7 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import maximum_bipartite_matching
 
 from transport_hub.core.access import Access
+from transport_hub.core.congestion import period_of_seconds
 
 DEADHEAD_KMH = 30.0
 BIG = 1e9
@@ -42,14 +43,21 @@ def trip_endpoints(feed, proj, weekday=None, access=None):
 
 
 def _deadhead(trips, access):
-    """مصفوفة التوصيل الفارغ من نهاية كل رحلة لبداية كل رحلة (مسافة م وزمن ث) على الشوارع (باتجاهها) أو بالتقدير. تُحسب على النقاط الفريدة فقط."""
+    """مصفوفة التوصيل الفارغ من نهاية كل رحلة لبداية كل رحلة: مسافة (م) وزمن (ث). الزمن يتبع ازدحام فترة اليوم التي تنتهي فيها الرحلة
+    (ملف الازدحام إن وُجد)، على الشوارع باتجاهها أو بالتقدير. تُحسب على النقاط الفريدة فقط."""
     ends = trips[["to_x", "to_y"]].round(1).to_numpy()
     starts = trips[["from_x", "from_y"]].round(1).to_numpy()
     ue, ie = np.unique(ends, axis=0, return_inverse=True)
     us, is_ = np.unique(starts, axis=0, return_inverse=True)
-    dm = access.drive_matrix(ue, us, "length")
-    ds = access.drive_matrix(ue, us, "time")
-    return dm[np.ix_(ie.ravel(), is_.ravel())], ds[np.ix_(ie.ravel(), is_.ravel())]
+    ie, is_ = ie.ravel(), is_.ravel()
+    dm = access.drive_matrix(ue, us, "length")[np.ix_(ie, is_)]
+    periods = trips["end"].map(period_of_seconds).to_numpy()
+    ds = np.empty_like(dm)
+    for p in np.unique(periods):
+        rows = np.where(periods == p)[0]
+        tm = access.with_period(p).drive_matrix(ue, us, "time")
+        ds[rows] = tm[np.ix_(ie[rows], is_)]
+    return dm, ds
 
 
 def _compat(trips, layover_s, max_gap_s, max_deadhead_km, access=None):
@@ -111,7 +119,12 @@ def block_stats(blocks, trips, depot_xy=None, access=None):
         if len(a):
             ends, starts = a[["to_x", "to_y"]].to_numpy(), b[["from_x", "from_y"]].to_numpy()
             d = access.drive_pairs(ends, starts, "length")
-            tsec = access.drive_pairs(ends, starts, "time")
+            tsec = np.array(
+                [
+                    access.with_period(period_of_seconds(e)).drive_pairs(ends[i : i + 1], starts[i : i + 1], "time")[0]
+                    for i, e in enumerate(a["end"].to_numpy())
+                ]
+            )
             dead_km += d.sum() / 1000
             idle_h += float((b["start"].to_numpy() - a["end"].to_numpy() - tsec).sum() / 3600)
         if depot_xy is not None:

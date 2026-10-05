@@ -116,7 +116,10 @@ def demo_load():
     w.save_df("trips", D.clean_trips(d["trips"], p))
     w.save_df("stands", p.attach(d["stands"]))
     w.save_obj("roads_lines", demo_city.street_lines())
-    for k in ("population", "poi", "gtfs", "trips", "stands", "roads_lines"):
+    avl, _apc = demo_city.avl_apc(d["gtfs"], days=3)
+    w.save_df("avl", avl)
+    demo_city.learn_demo_congestion(w)
+    for k in ("population", "poi", "gtfs", "trips", "stands", "roads_lines", "avl"):
         w.set_source(k, "demo")
     w.log("demo_loaded_api")
     return {"loaded": True}
@@ -138,6 +141,23 @@ def reports_package(radius: int = 400):
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="transport_package_{meta["fingerprint"]}.zip"', "X-Fingerprint": meta["fingerprint"]},
     )
+
+
+@app.get("/congestion/profile", dependencies=[Depends(auth())])
+def congestion_profile():
+    """عوامل الازدحام لكل فترة (زمن القيادة ÷ السير الحر) ومصدرها."""
+    prof = ws().obj("congestion")
+    if prof is None:
+        raise HTTPException(409, "لا ملف ازدحام: تعلّمه من AVL في الواجهة أو ارفع منحنى ساعات")
+    return _clean({"source": prof.source, "periods": prof.table()})
+
+
+@app.get("/transit/route-time-check", dependencies=[Depends(auth())])
+def route_time_check():
+    """واقعية جدول كل خط لكل فترة: زمن الجدول مقابل زمن الشبكة المتوقع بازدحام الفترة."""
+    from transport_hub.transit import service
+
+    return _clean(service.route_time_check(_feed(), _proj(), _access()))
 
 
 @app.get("/transit/routes", dependencies=[Depends(auth())])

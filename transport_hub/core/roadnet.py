@@ -201,7 +201,8 @@ class RoadNetwork:
         fc = np.array(lines.fclass, dtype=object)[ln]
         base = np.array([DRIVE_KMH.get(str(f).replace("_link", ""), 25) * (0.7 if str(f).endswith("_link") else 1.0) for f in fc], float)
         ms = np.array(lines.maxspeed if lines.maxspeed else [np.nan] * len(lines), float)[ln]
-        kmh = np.where(np.isfinite(ms) & (ms > 5), ms, base) * peak_factor
+        kmh_free = np.where(np.isfinite(ms) & (ms > 5), ms, base)  # سرعة السير الحر (بدون ازدحام)
+        kmh = kmh_free
         ow = np.array(lines.oneway if lines.oneway else ["B"] * len(lines), dtype=object)[ln]
         tsec = length / (kmh / 3.6)
         fwd, rev = ow != "T", ow != "F"
@@ -210,9 +211,13 @@ class RoadNetwork:
         dl = np.concatenate([length[fwd], length[rev]])
         dt = np.concatenate([tsec[fwd], tsec[rev]])
         self.n_nodes, self.n_edges = n, len(du)
+        self.peak_factor = peak_factor
+        self.default_factor = 1.0 / peak_factor  # عامل الازدحام الافتراضي (يعادل سرعة الذروة القديمة)
+        self._du, self._dv, self._dl, self._dt = du, dv, dl, dt  # أضلاع موجّهة وزمن السير الحر (ث)
+        self._time_cache = {}
         self.oneway_share = float((ow != "B").mean())
         self._drive_len = _csr_min(n, du, dv, dl)
-        self._drive_time = _csr_min(n, du, dv, dt)
+        self._drive_time = _csr_min(n, du, dv, dt * self.default_factor)
         wm = np.array([str(f) not in WALK_EXCLUDED for f in fc])
         wu, wv, wl = np.concatenate([a[wm], b[wm]]), np.concatenate([b[wm], a[wm]]), np.concatenate([length[wm], length[wm]])
         self._walk = _csr_min(n, wu, wv, wl)
@@ -242,10 +247,51 @@ class RoadNetwork:
         node = idx[i]
         return np.where(d <= MAX_SNAP_M, node, -1), d
 
-    def graph(self, mode, weight="length"):
+    @property
+    def fingerprint(self):
+        """بصمة الشبكة: لربط ملف الازدحام المتعلَّم بنفس الشبكة (تتغير بتغير الشوارع)."""
+        return f"{self.n_nodes}:{self.n_edges}:{self.total_km:.2f}"
+
+    def graph(self, mode, weight="length", profile=None, period=None):
         if mode == "walk":
             return self._walk
-        return self._drive_time if weight == "time" else self._drive_len
+        if weight != "time":
+            return self._drive_len
+        if profile is None or period is None:
+            return self._drive_time
+        key = (profile.key, period)
+        if key not in self._time_cache:
+            self._time_cache[key] = _csr_min(self.n_nodes, self._du, self._dv, self._dt * profile.edge_factors(period, self))
+        return self._time_cache[key]
+
+    def edge_index(self):
+        """مفتاح (u*n+v) → فهرس أسرع ضلع موجّه، لتحويل مسار العقد إلى أضلاع."""
+        if not hasattr(self, "_eidx"):
+            order = np.lexsort((self._dt, self._dv, self._du))
+            k = self._du[order].astype(np.int64) * self.n_nodes + self._dv[order]
+            first = np.concatenate([[True], k[1:] != k[:-1]])
+            self._eidx = (k[first], order[first])
+        return self._eidx
+
+    def path_edges(self, a_xy, b_xy, profile=None, period=None):
+        """أضلاع أقصر مسار قيادة (بالزمن) بين نقطتين: (فهارس الأضلاع، عقد المسار) أو (None, None)."""
+        a_xy, b_xy = np.asarray(a_xy, float).reshape(-1, 2)[:1], np.asarray(b_xy, float).reshape(-1, 2)[:1]
+        an, _ = self.snap(a_xy, "drive")
+        bn, _ = self.snap(b_xy, "drive")
+        if an[0] < 0 or bn[0] < 0:
+            return None, None
+        d, pred = dijkstra(self.graph("drive", "time", profile, period), directed=True, indices=int(an[0]), return_predecessors=True)
+        if not np.isfinite(d[bn[0]]):
+            return None, None
+        path = [int(bn[0])]
+        while path[-1] != an[0] and pred[path[-1]] >= 0:
+            path.append(int(pred[path[-1]]))
+        path = np.array(path[::-1])
+        if len(path) < 2:
+            return np.array([], int), path
+        keys, idx = self.edge_index()
+        q = path[:-1].astype(np.int64) * self.n_nodes + path[1:]
+        return idx[np.searchsorted(keys, q)], path
 
     # ───────── مشي ─────────
     def walk_within(self, src_xy, dst_xy, radius, batch=40):
@@ -299,11 +345,11 @@ class RoadNetwork:
         return out, idx
 
     # ───────── قيادة ─────────
-    def drive_pairs(self, a_xy, b_xy, weight="length", limit=None):
+    def drive_pairs(self, a_xy, b_xy, weight="length", limit=None, profile=None, period=None):
         """قيادة نقطة-لنقطة (أزواج مرتبة a[i]→b[i]) مع الاتجاه الواحد: يرجع (قيمة، لكل زوج؛ inf إن لم يُربط أو لم يوجد مسار)."""
         an, ad = self.snap(a_xy, "drive")
         bn, bd = self.snap(b_xy, "drive")
-        g = self.graph("drive", weight)
+        g = self.graph("drive", weight, profile, period)
         out = np.full(len(an), np.inf)
         by_src = {}
         for i, (s, t) in enumerate(zip(an, bn)):
@@ -322,11 +368,11 @@ class RoadNetwork:
             out = out + (ad + bd) / (20 / 3.6)  # ربط بسرعة 20 كم/س
         return out
 
-    def drive_matrix(self, src_xy, dst_xy, weight="length", batch=40):
+    def drive_matrix(self, src_xy, dst_xy, weight="length", batch=40, profile=None, period=None):
         """مصفوفة قيادة موجّهة src×dst (مسافة م أو زمن ث)."""
         sn, sd = self.snap(src_xy, "drive")
         dn, dd = self.snap(dst_xy, "drive")
-        g = self.graph("drive", weight)
+        g = self.graph("drive", weight, profile, period)
         out = np.full((len(sn), len(dn)), np.inf)
         uniq = np.unique(sn[sn >= 0])
         rows = {}
@@ -343,14 +389,14 @@ class RoadNetwork:
                 out[i] = row
         return out
 
-    def drive_path(self, a_xy, b_xy, weight="time"):
+    def drive_path(self, a_xy, b_xy, weight="time", profile=None, period=None):
         """خط المسار بين نقطتين على الشبكة (إحداثيات مسقطة) أو None."""
         a_xy, b_xy = np.asarray(a_xy, float).reshape(-1, 2)[:1], np.asarray(b_xy, float).reshape(-1, 2)[:1]
         an, _ = self.snap(a_xy, "drive")
         bn, _ = self.snap(b_xy, "drive")
         if an[0] < 0 or bn[0] < 0:
             return None
-        d, pred = dijkstra(self.graph("drive", weight), directed=True, indices=int(an[0]), return_predecessors=True)
+        d, pred = dijkstra(self.graph("drive", weight, profile, period), directed=True, indices=int(an[0]), return_predecessors=True)
         if not np.isfinite(d[bn[0]]):
             return None
         path = [int(bn[0])]

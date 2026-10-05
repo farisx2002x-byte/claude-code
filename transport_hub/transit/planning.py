@@ -62,7 +62,16 @@ def suggest_line(
     length_km = seg.sum() / 1000
     run_min = length_km / speed_kmh * 60 + len(line) * dwell_s / 60
     cycle = run_min * 2 * (1 + layover)
+    # زمن الرحلة الواقعي لكل فترة يوم من الشبكة وازدحامها (أو التقدير): الأسطول الفعلي = الأكبر عبر الفترات
+    from transport_hub.core.congestion import PERIOD_KEYS
+
+    dwell_min = len(line) * dwell_s / 60
+    by_period = {p: round(float(access.with_period(p).drive_pairs(xy[:-1], xy[1:], "time").sum() / 60 + dwell_min), 1) for p in PERIOD_KEYS}
+    fleet_p = {p: math.ceil(t * 2 * (1 + layover) / headway_min) for p, t in by_period.items()}
     return line, dict(
+        run_time_by_period=by_period,
+        fleet_by_period=fleet_p,
+        fleet_realistic=max(fleet_p.values()),
         stops=len(line),
         length_km=round(length_km, 1),
         run_time_min=round(run_min, 1),

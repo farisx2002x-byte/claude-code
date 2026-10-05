@@ -16,10 +16,10 @@ def _get(ws, name):
 
 
 def available(ws):
-    return {k: ws.has(k) for k in ("population", "poi", "gtfs", "trips", "stands", "avl", "apc", "register", "roads_lines")}
+    return {k: ws.has(k) for k in ("population", "poi", "gtfs", "trips", "stands", "avl", "apc", "register", "roads_lines", "congestion")}
 
 
-def assemble(ws: Workspace | None = None, radius=400, k_new=10, k_stands=8, wait_target=5.0, use_roads=True):
+def assemble(ws: Workspace | None = None, radius=400, k_new=10, k_stands=8, wait_target=5.0, use_roads=True, use_congestion=True):
     """يرجع (meta, sheets, sections, geo_tables). يتخطى الوحدات التي بياناتها غير متوفرة ويذكرها في ملاحظات الغلاف."""
     from transport_hub.admin import equity, scorecard
     from transport_hub.taxi import demand as TD
@@ -30,11 +30,14 @@ def assemble(ws: Workspace | None = None, radius=400, k_new=10, k_stands=8, wait
     from transport_hub.transit import planning, ridership, service
 
     ws = ws or Workspace()
-    access = load_access(ws, use_roads)
+    access = load_access(ws, use_roads, use_congestion)
     have = available(ws)
     meta_idx = ws.meta()
     datasets = {
-        k: {"rows": (len(_get(ws, k)) if k not in ("gtfs",) else len(_get(ws, k)["stops"])), "loaded": meta_idx.get(k, "")}
+        k: {
+            "rows": (len(_get(ws, k)["stops"]) if k == "gtfs" else len(_get(ws, k).period_factor) if k == "congestion" else len(_get(ws, k))),
+            "loaded": meta_idx.get(k, ""),
+        }
         for k, v in have.items()
         if v
     }
@@ -44,6 +47,7 @@ def assemble(ws: Workspace | None = None, radius=400, k_new=10, k_stands=8, wait
         "مواقف تاكسي مقترحة": k_stands,
         "انتظار التاكسي المستهدف (د)": wait_target,
         "طريقة المسافات": access.label(),
+        "الازدحام": access.congestion_label(),
     }
     notes, sheets, sections, geo_tables = [], [], [], {}
     vals = {}
@@ -239,6 +243,55 @@ def assemble(ws: Workspace | None = None, radius=400, k_new=10, k_stands=8, wait
             )
         )
 
+    if have["congestion"] and have["gtfs"] and access.profile is not None:
+        from transport_hub.core import congestion as CG
+
+        prof = access.profile
+        feed_c = G.from_tables(_get(ws, "gtfs"))
+        ptab = prof.table()
+        if prof.diagnostics is not None:
+            ptab = ptab.merge(prof.diagnostics[["period", "pairs", "obs", "observed_links"]], on="period", how="left")
+        rtc = service.route_time_check(feed_c, proj, access)
+        sheets.append(
+            Sheet(
+                "الازدحام - الفترات",
+                ptab,
+                "عوامل الازدحام لكل فترة",
+                [f"المصدر: {prof.source}. العامل = زمن القيادة الفعلي ÷ زمن السير الحر."],
+                chart={"type": "bar", "x": "period", "y": ["factor"], "title": "عامل الازدحام حسب الفترة"},
+            )
+        )
+        if len(rtc):
+            sheets.append(
+                Sheet(
+                    "واقعية الجدول",
+                    rtc.drop(columns=["name"]),
+                    "الجدول مقابل زمن الشبكة المتوقع",
+                    ["ناقص = الجدول أقصر من الواقع: يلزم تمديد الجدول أو أسطول أكبر."],
+                )
+            )
+        if access.net is not None and prof.edge_obs is not None:
+            peak = max(CG.PERIOD_KEYS, key=prof.factor)
+            wl = CG.worst_links(prof, access.net, peak, 25)
+            if len(wl):
+                a_lo, a_la = proj.lonlat(wl["xa"], wl["ya"])
+                b_lo, b_la = proj.lonlat(wl["xb"], wl["yb"])
+                wl = wl.assign(lon_a=a_lo, lat_a=a_la, lon_b=b_lo, lat_b=b_la, period=peak)[
+                    ["period", "factor", "length_m", "lon_a", "lat_a", "lon_b", "lat_b"]
+                ]
+                geo_tables["أضلاع_مزدحمة"] = wl
+                sheets.append(Sheet("أضلاع مزدحمة", wl, f"أكثر الأضلاع ازدحاماً في {peak}"))
+        n_short = int((rtc["verdict"].str.startswith("ناقص")).sum()) if len(rtc) else 0
+        sections.append(
+            dict(
+                title="الازدحام وأزمنة القيادة",
+                kpis=[(f"×{prof.factor(p):.2f}", p) for p in CG.PERIOD_KEYS],
+                bars=(list(ptab["period"]), [round(float(x), 2) for x in ptab["factor"]], "عامل الازدحام (1 = بلا ازدحام)"),
+                table=rtc.drop(columns=["name"]).head(15) if len(rtc) else None,
+                notes=[f"{n_short} من {len(rtc)} حالة (خط × فترة) جدولها أقصر من زمن الشبكة المتوقع."] if len(rtc) else [],
+                page_break=True,
+            )
+        )
     if vals:
         sc_all = scorecard.build(vals)
         sc = sc_all[sc_all["الحالة"] != "غير متوفر"].copy()

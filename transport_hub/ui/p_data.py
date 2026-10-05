@@ -54,6 +54,7 @@ TEMPLATES = {
     "ركاب APC": pd.DataFrame(
         {"date": ["2025-03-02"], "route_id": ["R1"], "trip_id": ["R1_0_21600"], "stop_id": ["S_R1_0"], "boardings": [12], "alightings": [0]}
     ),
+    "منحنى الازدحام": pd.DataFrame({"hour": [7, 8, 13, 17], "factor": [1.6, 1.8, 1.1, 1.7]}),
     "سجل الأسطول": pd.DataFrame(
         {
             "vehicle_id": [1],
@@ -70,6 +71,7 @@ TEMPLATES = {
 
 DATASET_LABELS = {
     "roads_lines": "شوارع OSM",
+    "congestion": "الازدحام",
     "population": "السكان",
     "poi": "نقاط الجذب",
     "gtfs": "النقل العام (GTFS)",
@@ -121,6 +123,7 @@ def load_demo():
     _store("apc", apc, "demo")
     _store("register", demo_city.vehicle_register(), "demo")
     _store("roads_lines", demo_city.street_lines(), "demo", obj=True)
+    demo_city.learn_demo_congestion(w)
     w.log("demo_loaded")
     st.cache_data.clear()
 

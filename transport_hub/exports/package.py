@@ -26,8 +26,12 @@ def build_zip(meta, sheets, sections, geo_tables=None):
     files["التقرير.xlsx"] = xl.getvalue()
     files["التقرير_التنفيذي.html"] = html_report.build(meta, sections).encode("utf-8")
     for name, df in (geo_tables or {}).items():
-        files[f"gis/{name}.geojson"] = geo.to_geojson(df)
-        files[f"gis/{name}.kml"] = geo.to_kml(df, doc_name=name)
+        if geo.is_lines(df):
+            files[f"gis/{name}.geojson"] = geo.to_geojson_lines(df)
+            files[f"gis/{name}.kml"] = geo.to_kml_lines(df, doc_name=name)
+        else:
+            files[f"gis/{name}.geojson"] = geo.to_geojson(df)
+            files[f"gis/{name}.kml"] = geo.to_kml(df, doc_name=name)
         files[f"csv/{name}.csv"] = geo.to_csv(df)
     manifest = dict(meta, files=sorted(files), rows={s.name: len(s.df) for s in sheets})
     files["manifest.json"] = json.dumps(manifest, ensure_ascii=False, indent=2, default=str).encode("utf-8")

@@ -103,3 +103,25 @@ def test_data_page_roads_tab_status(ws_env):
     at = AppTest.from_string(script("p_data"), default_timeout=300).run()
     assert not at.exception, [e.value for e in at.exception]
     assert any("حالة شبكة الشوارع" in m.value for m in at.markdown)
+
+
+def test_congestion_toggle_changes_status(ws_env):
+    at = AppTest.from_string(script("p_transit"), default_timeout=300).run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert "تعلّم" in " ".join(c.value for c in at.caption)  # التجريبية فيها ملف ازدحام متعلَّم
+    at.toggle(key="hub_use_cong").set_value(False).run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert "غير مطبّق" in " ".join(c.value for c in at.caption)
+
+
+def test_learn_congestion_button_flow(ws_env):
+    at = AppTest.from_string(script("p_perf"), default_timeout=300).run()
+    assert not at.exception, [e.value for e in at.exception]
+    from transport_hub.core.store import Workspace
+
+    Workspace().delete("congestion")
+    at = AppTest.from_string(script("p_perf"), default_timeout=300).run()
+    btn = next(b for b in at.button if b.key == "hub_c_learn")
+    btn.click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert Workspace().obj("congestion") is not None

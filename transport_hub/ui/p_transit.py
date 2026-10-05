@@ -8,7 +8,7 @@ import streamlit as st
 from transport_hub.admin import finance
 from transport_hub.core import geo
 from transport_hub.transit import coverage as COV
-from transport_hub.transit import csa, planning, ridership, service, timetable
+from transport_hub.transit import csa, planning, priority, ridership, service, timetable
 from transport_hub.transit import gtfs as G
 from transport_hub.ui import common as U
 
@@ -27,6 +27,11 @@ def _cov(sig_, walk_radii):
 def _routes(sig_):
     feed, proj = U.feed_obj(), U.proj()
     return service.route_metrics(feed, proj=proj, access=U.access()), service.headways(feed), service.hubs(feed, proj)
+
+
+@st.cache_data(show_spinner="جاري فحص واقعية الجدول…")
+def _rtc(sig_):
+    return service.route_time_check(U.feed_obj(), U.proj(), U.access())
 
 
 @st.cache_resource(show_spinner="جاري تجهيز محرك الرحلات…")
@@ -50,7 +55,7 @@ def render():
     k, cov, stops, sr = _cov(sg, (400, 800))
     rm, hw, hubs = _routes(sg)
     pop = d["population"]
-    tabs = st.tabs(["نظرة عامة", "التغطية", "الوصول بالزمن", "التخطيط", "الأسطول والتشغيل"])
+    tabs = st.tabs(["نظرة عامة", "التغطية", "الوصول بالزمن", "التخطيط", "واقعية الجدول", "أولوية الحافلات", "الأسطول والتشغيل"])
 
     with tabs[0]:
         U.kpis(
@@ -184,6 +189,12 @@ def render():
                         (f"{info['coverage_before']}% → {info['coverage_after']}%", "التغطية"),
                     ]
                 )
+                bp = info["run_time_by_period"]
+                st.caption(
+                    "زمن الرحلة الواقعي حسب الفترة (شبكة + ازدحام): "
+                    + "، ".join(f"{p} {t:.0f} د" for p, t in bp.items())
+                    + f" · الأسطول الواقعي = {info['fleet_realistic']} (الأكبر عبر الفترات) مقابل {info['fleet']} بسرعة الإدخال."
+                )
                 import pydeck as pdk
 
                 path = pdk.Layer(
@@ -224,6 +235,71 @@ def render():
                 st.success("حُفظ")
 
     with tabs[4]:
+        rtc = _rtc(sg)
+        if rtc.empty:
+            U.empty("لا رحلات كافية لفحص واقعية الجدول.")
+        else:
+            short = rtc[rtc["verdict"].str.startswith("ناقص")]
+            extra = int((rtc["fleet_needed"] - rtc["fleet_scheduled"]).clip(lower=0).groupby(rtc["route_id"]).max().sum())
+            U.kpis(
+                [
+                    (f"{len(short)} / {len(rtc)}", "حالات الجدول فيها أقصر من الواقع", "hard" if len(short) else "ok"),
+                    (extra, "مركبات إضافية للوفاء بالزمن الواقعي", "hard" if extra else "ok"),
+                    (f"{rtc['delta_min'].max():.1f} د", "أكبر نقص في الزمن"),
+                ]
+            )
+            if U.access().profile is None:
+                st.info("الأزمنة المتوقعة بسرعات فئة الطريق. تعلّم الازدحام من AVL (صفحة «الأداء الفعلي» ← الازدحام) لأزمنة أدق حسب الفترة.")
+            U.table(rtc.drop(columns=["name"]))
+            st.caption(
+                "المتوقع = قيادة بين المحطات على الشبكة بازدحام الفترة + توقفات الجدول. «ناقص» يعني أن الجدول أقصر من الواقع: تأخيرات مزمنة وحاجة لأسطول أكبر أو جدول أطول."
+            )
+            st.bar_chart(rtc.pivot_table(index="route_id", columns="period", values="delta_min").rename_axis("الخط"))
+
+    with tabs[5]:
+        st.caption("ماذا لو أُعطي الخط أولوية (ممر مخصص أو أولوية إشارات) على الأضلاع الأكثر تأخيراً في مساره؟")
+        routes_ = rm["route_id"].tolist()
+        c = st.columns(4)
+        rid = c[0].selectbox("الخط", routes_, key="hub_t_prio_r")
+        share = c[1].slider("حصة المسار بأولوية", 0.1, 1.0, 0.4, 0.05, key="hub_t_prio_s")
+        cut = c[2].slider("تقليل التأخير على تلك الأضلاع", 0.2, 0.9, 0.6, 0.05, key="hub_t_prio_c")
+        zz, _bs, br_ = ridership.estimate(cov, stops, sr)
+        est_pax = float(br_.loc[br_["route_id"] == rid, "pax_day"].sum())
+        pax = c[3].number_input("ركاب/يوم", 0, 10**7, int(est_pax), 500, key="hub_t_prio_p")
+        res = priority.evaluate(feed, proj, U.access(), rid, share, cut, pax or None)
+        sm = res["summary"]
+        U.kpis(
+            [
+                (f"{sm['vehicle_hours_saved_year']:,.0f}", "ساعات مركبة موفّرة/سنة"),
+                (f"{sm['opex_saving_year']:,.0f}", "وفر تشغيل/سنة (ريال)"),
+                (sm["fleet_saved"], "مركبات موفّرة في الذروة"),
+                (f"{sm.get('passenger_hours_saved_year', 0):,.0f}", "ساعات ركاب موفّرة/سنة"),
+            ]
+        )
+        U.table(res["table"])
+        if res["links"] is not None and len(res["links"]):
+            lk = res["links"].copy()
+            lk["lon_a"], lk["lat_a"] = proj.lonlat(lk["xa"], lk["ya"])
+            lk["lon_b"], lk["lat_b"] = proj.lonlat(lk["xb"], lk["yb"])
+            import pydeck as pdk
+
+            U.deck(
+                [
+                    pdk.Layer(
+                        "LineLayer",
+                        lk,
+                        get_source_position="[lon_a, lat_a]",
+                        get_target_position="[lon_b, lat_b]",
+                        get_color=[230, 120, 0],
+                        get_width=6,
+                        width_min_pixels=3,
+                    )
+                ]
+            )
+            U.legend([("أضلاع الأولوية المقترحة", [230, 120, 0])])
+        st.caption("وقت الركاب مُقيَّم بـ 20 ريال/ساعة (قابل للتعديل في الكود)، وتكلفة التشغيل بأجر سائق وتكلفة وقود وصيانة تقديرية.")
+
+    with tabs[6]:
         z, by_stop, by_route = ridership.estimate(cov, stops, sr)
         prod = ridership.productivity(by_route, rm)
         st.caption("الركاب تقدير أولي من نموذج حصة النقل العام (يحتاج معايرة بعدّادات الركاب أو مسح).")

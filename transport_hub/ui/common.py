@@ -54,14 +54,17 @@ def ws():
 
 def sig():
     """توقيع حالة مساحة العمل + وضع المسافات (يبطل الكاش عند أي تحديث للبيانات أو تبديل شبكة الشوارع)."""
-    return json.dumps(ws().meta(), sort_keys=True) + f"|roads={st.session_state.get('hub_use_roads', True)}"
+    return (
+        json.dumps(ws().meta(), sort_keys=True)
+        + f"|roads={st.session_state.get('hub_use_roads', True)}|cong={st.session_state.get('hub_use_cong', True)}"
+    )
 
 
 def access():
     """Access لمسافات الوصول: شبكة الشوارع إن وُجدت ومفعّلة، وإلا التقدير (مستقيم × 1.3)."""
     from transport_hub.core.access import load_access
 
-    return load_access(ws(), st.session_state.get("hub_use_roads", True))
+    return load_access(ws(), st.session_state.get("hub_use_roads", True), st.session_state.get("hub_use_cong", True))
 
 
 def has_roads():
@@ -69,14 +72,22 @@ def has_roads():
 
 
 def access_bar():
-    """شريط حالة طريقة حساب المسافات + مفتاح تفعيل شبكة الشوارع (يظهر في الصفحات التحليلية)."""
+    """شريط حالة طريقة حساب المسافات والأزمنة + مفاتيح تفعيل شبكة الشوارع والازدحام (يظهر في الصفحات التحليلية)."""
     a = access()
-    if has_roads():
-        c1, c2 = st.columns([1, 3], vertical_alignment="center")
-        c1.toggle("شبكة الشوارع الفعلية", value=True, key="hub_use_roads", help="إيقافها يرجع للتقدير: خط مستقيم × 1.3")
-        c2.caption(f"المسافات: {a.label()}" + (f" · {a.unlinked} نقطة بعيدة عن الشبكة قُدّرت بالخط المستقيم" if a.unlinked else ""))
+    has_c = ws().obj("congestion") is not None
+    if has_roads() or has_c:
+        c1, c2, c3 = st.columns([1, 1, 3], vertical_alignment="center")
+        if has_roads():
+            c1.toggle("شبكة الشوارع الفعلية", value=True, key="hub_use_roads", help="إيقافها يرجع للتقدير: خط مستقيم × 1.3")
+        if has_c:
+            c2.toggle("ازدحام الفترات", value=True, key="hub_use_cong", help="يضرب أزمنة القيادة بعوامل ازدحام كل فترة من اليوم")
+        c3.caption(
+            f"المسافات: {a.label()}"
+            + (f" · {a.unlinked} نقطة بعيدة عن الشبكة قُدّرت بالخط المستقيم" if a.unlinked else "")
+            + f" · الازدحام: {a.congestion_label()}"
+        )
     else:
-        st.caption(f"المسافات: {a.label()} · أضف شوارع OSM من صفحة «البيانات» ← تبويب الشوارع لدقة أعلى.")
+        st.caption(f"المسافات: {a.label()} · أضف شوارع OSM من «البيانات» ثم تعلّم الازدحام من «الأداء الفعلي» لدقة أعلى.")
 
 
 def style():
@@ -219,6 +230,24 @@ def legend(items):
         '<div class="hub-legend">' + "".join(f'<span><i style="background:{hexc(c)}"></i>{n}</span>' for n, c in items) + "</div>",
         unsafe_allow_html=True,
     )
+
+
+def period_bars(df, x, y, title_y):
+    """أعمدة حسب فترات اليوم بترتيبها الزمني (st.bar_chart يرتب أبجدياً)، بدون تدوير للتسميات."""
+    import altair as alt
+
+    from transport_hub.core.congestion import PERIOD_KEYS
+
+    chart = (
+        alt.Chart(df)
+        .mark_bar()
+        .encode(
+            x=alt.X(f"{x}:N", sort=PERIOD_KEYS, title="الفترة", axis=alt.Axis(labelAngle=0)),
+            y=alt.Y(f"{y}:Q", title=title_y),
+            tooltip=[alt.Tooltip(f"{x}:N", title="الفترة"), alt.Tooltip(f"{y}:Q", title=title_y, format=".2f")],
+        )
+    )
+    st.altair_chart(chart, width="stretch")
 
 
 def guard(fn):

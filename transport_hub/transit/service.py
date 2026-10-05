@@ -135,3 +135,63 @@ def stop_route_freq(feed, weekday=None, hours=(7, 9)):
     g["deps_per_hour"] = g["deps"] / max(hours[1] - hours[0], 1)
     g["headway_min"] = 60.0 / g["deps_per_hour"]
     return g
+
+
+def _period_headway_min(g, lo, hi):
+    """متوسط التردد (د) لرحلات خط/اتجاه تنطلق ضمن [lo, hi) ساعة."""
+    s = np.sort(g.loc[(g["start"] >= lo * 3600) & (g["start"] < hi * 3600), "start"].to_numpy())
+    return float(np.diff(s).mean() / 60) if len(s) > 1 else np.nan
+
+
+def route_time_check(feed, proj=None, access=None, layover=0.15, tolerance=0.05):
+    """هل جدول الرحلات واقعي؟ لكل (خط، فترة يوم): زمن الرحلة المجدول مقابل المتوقع من الشبكة بازدحام تلك الفترة
+    (قيادة بين المحطات + توقفات الجدول)، والأسطول المطلوب بالزمن الفعلي مقابل الأسطول المضمّن في الجدول.
+    الحكم: «واقعي» إن كان الفرق ≤ tolerance، «ناقص» إن كان المتوقع أطول (يحتاج جدولاً أطول/أسطولاً أكبر)، «مبالغ» إن كان الجدول أطول بكثير."""
+    from transport_hub.core.congestion import PERIODS
+
+    access = access or Access()
+    t = trip_table(feed)
+    proj = proj or geo.Projector.for_points(feed.stops["stop_lon"].dropna(), feed.stops["stop_lat"].dropna())
+    st = feed.stop_times.merge(feed.stops[["stop_id", "stop_lat", "stop_lon"]], on="stop_id")
+    st["x"], st["y"] = proj.xy(st["stop_lon"], st["stop_lat"])
+    names = feed.routes.set_index("route_id")["route_long_name"].to_dict()
+    rows = []
+    for rid, g in t.groupby("route_id"):
+        dirs = g["direction_id"].nunique()
+        rep = {}
+        for d_, gd in g.groupby("direction_id"):
+            trip = gd.sort_values("n_stops", ascending=False).iloc[0]["trip_id"]
+            rep[d_] = st[st["trip_id"] == trip].sort_values("stop_sequence")
+        for period, (lo, hi) in PERIODS.items():
+            sub = g[(g["start"] >= lo * 3600) & (g["start"] < hi * 3600)]
+            if sub.empty:
+                continue
+            pred_dir = []
+            for s in rep.values():
+                xy = s[["x", "y"]].to_numpy()
+                drive = access.with_period(period).drive_pairs(xy[:-1], xy[1:], "time").sum()
+                dwell = (s["dep"] - s["arr"]).clip(lower=0).iloc[:-1].sum()
+                pred_dir.append((drive + dwell) / 60)
+            pred = float(np.mean(pred_dir))
+            sched = float(sub["duration_min"].mean())
+            hw = np.nanmean([_period_headway_min(gd[gd["route_id"] == rid], lo, hi) for _, gd in g.groupby("direction_id")])
+            fleet_s = math.ceil(sched * dirs * (1 + layover) / hw) if hw and hw == hw else np.nan
+            fleet_n = math.ceil(pred * dirs * (1 + layover) / hw) if hw and hw == hw else np.nan
+            delta = pred - sched
+            verdict = "واقعي" if abs(delta) <= tolerance * sched else "ناقص: الجدول أقصر من الواقع" if delta > 0 else "مبالغ: الجدول أطول من اللازم"
+            rows.append(
+                dict(
+                    route_id=rid,
+                    name=names.get(rid, rid),
+                    period=period,
+                    trips=len(sub),
+                    scheduled_min=round(sched, 1),
+                    predicted_min=round(pred, 1),
+                    delta_min=round(delta, 1),
+                    headway_min=round(float(hw), 1) if hw == hw else np.nan,
+                    fleet_scheduled=fleet_s,
+                    fleet_needed=fleet_n,
+                    verdict=verdict,
+                )
+            )
+    return pd.DataFrame(rows)

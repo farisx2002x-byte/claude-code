@@ -58,3 +58,45 @@ def to_kml(df, name_col=None, lon="lon", lat="lat", doc_name="نقاط", skip=("
 
 def to_csv(df):
     return df.to_csv(index=False).encode("utf-8-sig")
+
+
+LINE_COLS = {"lon_a", "lat_a", "lon_b", "lat_b"}
+
+
+def is_lines(df):
+    return LINE_COLS <= set(df.columns)
+
+
+def to_geojson_lines(df, skip=()):
+    """FeatureCollection خطوط (قطعة من lon_a,lat_a إلى lon_b,lat_b) والخصائص بقية الأعمدة البسيطة."""
+    d = df.dropna(subset=list(LINE_COLS))
+    cols = _props(d, set(skip) | LINE_COLS)
+    feats = [
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [round(float(r["lon_a"]), 6), round(float(r["lat_a"]), 6)],
+                    [round(float(r["lon_b"]), 6), round(float(r["lat_b"]), 6)],
+                ],
+            },
+            "properties": {c: _clean(r[c]) for c in cols},
+        }
+        for r in d.to_dict("records")
+    ]
+    return json.dumps({"type": "FeatureCollection", "features": feats}, ensure_ascii=False).encode("utf-8")
+
+
+def to_kml_lines(df, doc_name="خطوط"):
+    d = df.dropna(subset=list(LINE_COLS))
+    cols = _props(d, LINE_COLS)
+    out = ['<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>', f"<name>{html.escape(doc_name)}</name>"]
+    for i, r in enumerate(d.to_dict("records"), 1):
+        desc = "<br/>".join(f"{html.escape(str(c))}: {html.escape(str(_clean(r[c])))}" for c in cols)
+        out.append(
+            f"<Placemark><name>{i}</name><description><![CDATA[{desc}]]></description><LineString><coordinates>"
+            f"{float(r['lon_a']):.6f},{float(r['lat_a']):.6f},0 {float(r['lon_b']):.6f},{float(r['lat_b']):.6f},0</coordinates></LineString></Placemark>"
+        )
+    out.append("</Document></kml>")
+    return "".join(out).encode("utf-8")

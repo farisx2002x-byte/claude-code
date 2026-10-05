@@ -37,6 +37,7 @@ def render():
         "apc": "ركاب APC",
         "register": "سجل الأسطول",
         "roads_lines": "شوارع OSM",
+        "congestion": "الازدحام",
     }
     U.legend([(labels[k] + (" ✓" if v else " ✗"), "#2e9e4f" if v else "#9aa4af") for k, v in have.items()])
     if U.ws().is_demo():

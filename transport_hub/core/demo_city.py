@@ -263,3 +263,21 @@ def street_lines(spacing_km=0.25, river_y_km=4.0, bridge_x_km=4.0):
             add(south, cls, way)
             add(north, cls, way)
     return Lines(co, fc, ow, [np.nan] * len(co))
+
+
+def learn_demo_congestion(ws):
+    """يتعلّم ملف الازدحام من AVL والشوارع التجريبية المحفوظة في مساحة العمل (إن توفرت) ويحفظه. يتجاهل الفشل بصمت (اختياري)."""
+    try:
+        from transport_hub.core import congestion as CG
+        from transport_hub.core import geo
+        from transport_hub.core.access import load_access
+        from transport_hub.ops import performance as P
+        from transport_hub.transit import gtfs
+
+        net = load_access(ws, True, False).net
+        feed = gtfs.from_tables(ws.obj("gtfs"))
+        prof = CG.learn_from_avl(net, feed, P.clean_avl(ws.df("avl")), geo.Projector(ws.obj("proj_epsg")))
+        ws.save_obj("congestion", prof)
+        ws.set_source("congestion", "demo")
+    except Exception:  # noqa: BLE001
+        pass
