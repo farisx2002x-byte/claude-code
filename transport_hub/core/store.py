@@ -35,6 +35,18 @@ class Workspace:
         p = self._p(name, "pkl")
         return pickle.loads(p.read_bytes()) if p.exists() else None
 
+    def delete(self, name):
+        for ext in ("parquet", "pkl"):
+            p = self._p(name, ext)
+            if p.exists():
+                p.unlink()
+        idx = self.meta()
+        if idx.pop(name, None) is not None:
+            self._p("_meta", "json").write_text(json.dumps(idx, ensure_ascii=False, indent=1), encoding="utf-8")
+        src = self.obj("_sources") or {}
+        if src.pop(name, None) is not None:
+            self.save_obj("_sources", src)
+
     def has(self, name):
         return self._p(name, "parquet").exists() or self._p(name, "pkl").exists()
 

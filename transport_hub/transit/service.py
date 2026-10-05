@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from transport_hub.core import geo
+from transport_hub.core.access import Access
 
 PERIODS = {"الذروة الصباحية": (6, 9), "منتصف النهار": (9, 15), "الذروة المسائية": (15, 19), "المساء": (19, 24)}
 
@@ -35,20 +36,32 @@ def headways(feed, weekday=None):
     return pd.DataFrame(rows)
 
 
-def route_metrics(feed, weekday=None, proj=None, layover=0.15):
+SPEED_MIN, SPEED_MAX = 8.0, 45.0  # نطاق السرعة التجارية المعقول للحافلات الحضرية (كم/س)
+
+
+def speed_check(kmh):
+    """تحقق من اتساق الجدول مع طول المسار على الشبكة: سرعة خارج النطاق المعقول تعني أن الجدول أو الطول غير واقعي."""
+    if kmh != kmh:
+        return "—"
+    return "مرتفعة: الجدول أسرع من الواقع" if kmh > SPEED_MAX else "منخفضة: الجدول أبطأ من الطول" if kmh < SPEED_MIN else "معقولة"
+
+
+def route_metrics(feed, weekday=None, proj=None, layover=0.15, access=None):
     """مقاييس كل خط: الطول، المحطات، تباعد المحطات، السرعة التجارية، الرحلات اليومية، والأسطول المطلوب للذروة."""
     t = trip_table(feed, weekday)
     st = feed.stop_times.merge(feed.stops[["stop_id", "stop_lat", "stop_lon"]], on="stop_id")
     proj = proj or geo.Projector.for_points(feed.stops["stop_lon"].dropna(), feed.stops["stop_lat"].dropna())
     st["x"], st["y"] = proj.xy(st["stop_lon"], st["stop_lat"])
     hw = headways(feed, weekday)
+    access = access or Access()
     rows = []
     names = feed.routes.set_index("route_id")["route_long_name"].to_dict()
     for rid, g in t.groupby("route_id"):
         # رحلة تمثيلية: الأكثر محطات
         rep = g.sort_values("n_stops", ascending=False).iloc[0]
         s = st[st["trip_id"] == rep["trip_id"]].sort_values("stop_sequence")
-        seg = np.hypot(np.diff(s["x"].values), np.diff(s["y"].values)) * geo.DETOUR
+        xy = s[["x", "y"]].to_numpy()
+        seg = access.drive_pairs(xy[:-1], xy[1:], "length")  # الحافلة تتبع الشوارع واتجاهها الواحد
         length_km = float(seg.sum() / 1000)
         dur = float(rep["duration_min"])
         peak_hw = hw[(hw.route_id == rid) & (hw.period.isin(["الذروة الصباحية", "الذروة المسائية"]))]["headway_min"].min()
@@ -65,6 +78,7 @@ def route_metrics(feed, weekday=None, proj=None, layover=0.15):
                 avg_stop_spacing_m=round(seg.mean(), 0) if len(seg) else np.nan,
                 run_time_min=round(dur, 1),
                 commercial_speed_kmh=round(length_km / (dur / 60), 1) if dur else np.nan,
+                speed_check=speed_check(length_km / (dur / 60) if dur else np.nan),
                 trips_per_day=len(g),
                 peak_headway_min=round(peak_hw, 1) if peak_hw == peak_hw else np.nan,
                 peak_fleet=fleet,

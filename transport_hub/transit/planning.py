@@ -6,30 +6,41 @@ import numpy as np
 import pandas as pd
 
 from transport_hub.core import geo
+from transport_hub.core.access import Access
 from transport_hub.siting import coverage as SC
 from transport_hub.siting import mcda
 from transport_hub.transit import coverage as COV
 
 
-def suggest_stops(pop, existing_xy, cand, radius_m=400, k=10, poi=None, poi_weight=0.0, proj=None):
+def suggest_stops(pop, existing_xy, cand, radius_m=400, k=10, poi=None, poi_weight=0.0, proj=None, access=None):
     """أفضل k محطة جديدة تعظم السكان المغطين الجدد (مع مكافأة اختيارية لقرب نقاط الجذب).
-    radius_m مسافة مشي فعلية؛ نحولها لنصف قطر مستقيم بقسمة معامل التعرج."""
+    radius_m مسافة مشي فعلية: على شبكة الشوارع إن توفرت (access)، وإلا مستقيم ÷ معامل التعرج."""
+    access = access or Access()
     r = radius_m / geo.DETOUR
     cxy = cand[["x", "y"]].to_numpy()
+    dxy = pop[["x", "y"]].to_numpy()
     bonus = None
     if poi is not None and len(poi) and poi_weight > 0:
         b = mcda.poi_within(cxy, poi, r)
         bonus = poi_weight * pop["pop"].sum() * 0.001 * (b / b.max()) if b.max() > 0 else None
-    sel, (before, after) = SC.max_coverage(pop[["x", "y"]].to_numpy(), pop["pop"].to_numpy(float), cxy, r, k, existing_xy=existing_xy, bonus=bonus)
+    covered = None
+    if existing_xy is not None and len(existing_xy):
+        d0, _ = access.walk_nearest(dxy, np.asarray(existing_xy, float), limit=radius_m * 2)
+        covered = d0 <= radius_m
+    lists = access.cover_lists(cxy, dxy, radius_m)
+    sel, (before, after) = SC.max_coverage(dxy, pop["pop"].to_numpy(float), cxy, r, k, bonus=bonus, lists=lists, covered=covered)
     if proj is not None and len(sel):
         sel["lon"], sel["lat"] = proj.lonlat(sel["x"], sel["y"])
     return sel, (before, after)
 
 
-def suggest_line(pop, existing_xy, hubs_xy, cand, n_stops=10, radius_m=400, headway_min=10, speed_kmh=20, dwell_s=30, layover=0.15, proj=None):
+def suggest_line(
+    pop, existing_xy, hubs_xy, cand, n_stops=10, radius_m=400, headway_min=10, speed_kmh=20, dwell_s=30, layover=0.15, proj=None, access=None
+):
     """يقترح خطاً جديداً: n محطة تخدم أكبر سكان غير مخدومين، مرتبة كسلسلة تبدأ من أقرب محور تبديل.
     يرجع (جدول المحطات مرتبة، ملخص الخط)."""
-    sel, (before, after) = suggest_stops(pop, existing_xy, cand, radius_m, n_stops, proj=proj)
+    access = access or Access()
+    sel, (before, after) = suggest_stops(pop, existing_xy, cand, radius_m, n_stops, proj=proj, access=access)
     if sel.empty:
         return sel, {}
     pts = sel[["x", "y"]].to_numpy()
@@ -46,7 +57,8 @@ def suggest_line(pop, existing_xy, hubs_xy, cand, n_stops=10, radius_m=400, head
         left.remove(nxt)
     line = sel.iloc[order].reset_index(drop=True)
     line["order"] = np.arange(1, len(line) + 1)
-    seg = np.hypot(np.diff(line["x"].values), np.diff(line["y"].values)) * geo.DETOUR
+    xy = line[["x", "y"]].to_numpy()
+    seg = access.drive_pairs(xy[:-1], xy[1:], "length")  # الحافلة تتبع الشوارع (واتجاهها الواحد)
     length_km = seg.sum() / 1000
     run_min = length_km / speed_kmh * 60 + len(line) * dwell_s / 60
     cycle = run_min * 2 * (1 + layover)
@@ -62,7 +74,7 @@ def suggest_line(pop, existing_xy, hubs_xy, cand, n_stops=10, radius_m=400, head
     )
 
 
-def scenario_kpis(pop, stops, stop_route, add_stops=None, headway_factor=None, radii=(400, 800)):
+def scenario_kpis(pop, stops, stop_route, add_stops=None, headway_factor=None, radii=(400, 800), access=None):
     """مؤشرات الشبكة بعد تعديلات. stops: stop_id,x,y. stop_route: stop_id,route_id,headway_min.
     add_stops: قائمة dict(x,y,route_id,headway_min) محطات مضافة على خط. headway_factor: dict route_id→معامل ضرب التردد (0.5 = ضعف الخدمة)."""
     st, sr = stops[["stop_id", "x", "y"]].copy(), stop_route.copy()
@@ -73,8 +85,8 @@ def scenario_kpis(pop, stops, stop_route, add_stops=None, headway_factor=None, r
         new["stop_id"] = [f"NEW_{i}" for i in range(len(new))]
         st = pd.concat([st, new[["stop_id", "x", "y"]]], ignore_index=True)
         sr = pd.concat([sr, new[["stop_id", "route_id", "headway_min"]]], ignore_index=True)
-    cov = COV.coverage(pop, st[["x", "y"]].to_numpy(), radii)
-    cov = COV.accessibility_index(cov, st, sr)
+    cov = COV.coverage(pop, st[["x", "y"]].to_numpy(), radii, access)
+    cov = COV.accessibility_index(cov, st, sr, access=access)
     p = cov["pop"]
     out = {f"covered_{r}_pct": round(100 * p[cov[f"covered_{r}"]].sum() / p.sum(), 2) for r in radii}
     out["avg_access_index"] = round(float(np.average(cov["access_index"], weights=p)), 2)

@@ -16,6 +16,7 @@ def render():
         "المستشفيات والجامعات والمولات وغيرها: أوزانها وجاذبيتها وقدرة النقل العام على بلوغها.",
         "الوزن يمثل حجم الرحلات التي تولّدها النقطة. نموذج الجاذبية يوزّع رحلات كل منطقة على الجاذبات بدالة أسية للمسافة (β أكبر = رحلات أقصر).",
     )
+    U.access_bar()
     d = U.require("population", "poi")
     if d is None:
         return
@@ -72,7 +73,7 @@ def render():
         beta = c[0].slider("معامل تأثير المسافة β", 0.05, 1.0, 0.25, 0.05, key="hub_a_beta")
         rate = c[1].number_input("رحلات يومية للفرد", 0.5, 6.0, 2.5, 0.1, key="hub_a_rate")
         try:
-            z, od, _ = DM.gravity(pop, poi, beta, rate)
+            z, od, _ = DM.gravity(pop, poi, beta, rate, access=U.access())
         except ValueError as e:
             st.error(str(e))
             return

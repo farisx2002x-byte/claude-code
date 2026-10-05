@@ -71,6 +71,12 @@ def _proj():
     return geo.Projector(_need("proj_epsg")["proj_epsg"])
 
 
+def _access():
+    from transport_hub.core.access import load_access
+
+    return load_access(ws())
+
+
 def _clean(o):
     """يحوّل نتائج numpy/pandas لقيم JSON."""
     import pandas as pd
@@ -109,7 +115,8 @@ def demo_load():
     w.save_obj("gtfs", d["gtfs"])
     w.save_df("trips", D.clean_trips(d["trips"], p))
     w.save_df("stands", p.attach(d["stands"]))
-    for k in ("population", "poi", "gtfs", "trips", "stands"):
+    w.save_obj("roads_lines", demo_city.street_lines())
+    for k in ("population", "poi", "gtfs", "trips", "stands", "roads_lines"):
         w.set_source(k, "demo")
     w.log("demo_loaded_api")
     return {"loaded": True}
@@ -137,7 +144,7 @@ def reports_package(radius: int = 400):
 def transit_routes():
     from transport_hub.transit import service
 
-    return _clean(service.route_metrics(_feed(), proj=_proj()))
+    return _clean(service.route_metrics(_feed(), proj=_proj(), access=_access()))
 
 
 @app.get("/transit/coverage", dependencies=[Depends(auth())])
@@ -147,7 +154,7 @@ def transit_coverage(radius: int = 400):
 
     pop, feed, proj = _need("population")["population"], _feed(), _proj()
     st = COV.stops_frame(feed, proj)
-    k, cov = planning.scenario_kpis(pop, st, service.stop_route_freq(feed), radii=(radius,))
+    k, cov = planning.scenario_kpis(pop, st, service.stop_route_freq(feed), radii=(radius,), access=_access())
     return _clean({"kpis": k, "by_district": COV.summary(cov)})
 
 
@@ -168,7 +175,7 @@ def siting_max_coverage(req: SitingReq):
     if w is not None:
         ex = COV.stops_frame(_feed(), proj)[["x", "y"]].to_numpy()
     cand = geo.candidate_grid(pop["x"], pop["y"], req.cell_m)
-    sel, (b, a) = planning.suggest_stops(pop, ex if ex is not None else np.zeros((0, 2)), cand, req.radius_m, req.k, proj=proj)
+    sel, (b, a) = planning.suggest_stops(pop, ex if ex is not None else np.zeros((0, 2)), cand, req.radius_m, req.k, proj=proj, access=_access())
     return _clean({"coverage_before_pct": b, "coverage_after_pct": a, "sites": sel[["rank", "gain", "cum_covered_pct", "lon", "lat"]]})
 
 
@@ -196,8 +203,9 @@ def scorecard():
 
     pop, feed, proj = _need("population")["population"], _feed(), _proj()
     st = COV.stops_frame(feed, proj)
-    k, cov = planning.scenario_kpis(pop, st, service.stop_route_freq(feed))
-    rm = service.route_metrics(feed, proj=proj)
+    acc = _access()
+    k, cov = planning.scenario_kpis(pop, st, service.stop_route_freq(feed), access=acc)
+    rm = service.route_metrics(feed, proj=proj, access=acc)
     vals = dict(
         transit_cov400=k["covered_400_pct"],
         transit_cov800=k["covered_800_pct"],

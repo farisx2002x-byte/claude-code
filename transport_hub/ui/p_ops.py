@@ -11,8 +11,9 @@ from transport_hub.ui import common as U
 @st.cache_data(show_spinner="جاري جدولة المركبات…")
 def _blocks(sig_, layover, gap, dh, minimize):
     feed, proj = U.feed_obj(), U.proj()
-    trips = B.trip_endpoints(feed, proj)
-    return B.build_blocks(trips, layover, gap, minimize, None, dh) + (trips,)
+    acc = U.access()
+    trips = B.trip_endpoints(feed, proj, access=acc)
+    return B.build_blocks(trips, layover, gap, minimize, None, dh, acc) + (trips,)
 
 
 def render():
@@ -22,6 +23,7 @@ def render():
         "أقل عدد مركبات وسائقين يغطي الجدول، وإدارة الأسطول والتحول الكهربائي.",
         "الحد النظري = أقصى عدد رحلات متزامنة. الفرق عنه سببه التقاء النهايات والاستراحات. قطع السائقين ليست ورديات كاملة (انظر ملاحظة التبويب).",
     )
+    U.access_bar()
     d = U.require("gtfs", "population")
     if d is None:
         return

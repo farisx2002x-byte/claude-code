@@ -53,8 +53,30 @@ def ws():
 
 
 def sig():
-    """توقيع حالة مساحة العمل (يبطل الكاش عند أي تحديث للبيانات)."""
-    return json.dumps(ws().meta(), sort_keys=True)
+    """توقيع حالة مساحة العمل + وضع المسافات (يبطل الكاش عند أي تحديث للبيانات أو تبديل شبكة الشوارع)."""
+    return json.dumps(ws().meta(), sort_keys=True) + f"|roads={st.session_state.get('hub_use_roads', True)}"
+
+
+def access():
+    """Access لمسافات الوصول: شبكة الشوارع إن وُجدت ومفعّلة، وإلا التقدير (مستقيم × 1.3)."""
+    from transport_hub.core.access import load_access
+
+    return load_access(ws(), st.session_state.get("hub_use_roads", True))
+
+
+def has_roads():
+    return ws().obj("roads_lines") is not None
+
+
+def access_bar():
+    """شريط حالة طريقة حساب المسافات + مفتاح تفعيل شبكة الشوارع (يظهر في الصفحات التحليلية)."""
+    a = access()
+    if has_roads():
+        c1, c2 = st.columns([1, 3], vertical_alignment="center")
+        c1.toggle("شبكة الشوارع الفعلية", value=True, key="hub_use_roads", help="إيقافها يرجع للتقدير: خط مستقيم × 1.3")
+        c2.caption(f"المسافات: {a.label()}" + (f" · {a.unlinked} نقطة بعيدة عن الشبكة قُدّرت بالخط المستقيم" if a.unlinked else ""))
+    else:
+        st.caption(f"المسافات: {a.label()} · أضف شوارع OSM من صفحة «البيانات» ← تبويب الشوارع لدقة أعلى.")
 
 
 def style():

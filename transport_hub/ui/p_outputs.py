@@ -10,7 +10,9 @@ from transport_hub.ui import common as U
 
 @st.cache_data(show_spinner="جاري بناء المخرجات…")
 def _assemble(sig_, radius, k_new, k_stands, wait):
-    meta, sheets, sections, geo_tables = builder.assemble(U.ws(), radius, k_new, k_stands, wait)
+    meta, sheets, sections, geo_tables = builder.assemble(
+        U.ws(), radius, k_new, k_stands, wait, use_roads=st.session_state.get("hub_use_roads", True)
+    )
     return meta, sheets, sections, geo_tables
 
 
@@ -34,6 +36,7 @@ def render():
         "avl": "تتبع AVL",
         "apc": "ركاب APC",
         "register": "سجل الأسطول",
+        "roads_lines": "شوارع OSM",
     }
     U.legend([(labels[k] + (" ✓" if v else " ✗"), "#2e9e4f" if v else "#9aa4af") for k, v in have.items()])
     if U.ws().is_demo():

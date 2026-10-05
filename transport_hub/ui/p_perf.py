@@ -131,7 +131,7 @@ def render():
 
                 st_ = COV.stops_frame(feed, U.proj())
                 sr = service.stop_route_freq(feed)
-                _, cov = planning.scenario_kpis(pop, st_, sr)
+                _, cov = planning.scenario_kpis(pop, st_, sr, access=U.access())
                 _, _, br = ridership.estimate(cov, st_, sr)
                 m, factor = P.calibrate(apc_sum, br)
                 st.markdown("**معايرة نموذج تقدير الركاب بالأرقام الفعلية**")

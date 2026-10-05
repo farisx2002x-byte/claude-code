@@ -12,18 +12,30 @@ def _cover_lists(demand_xy, cand_xy, radius):
     return tree.query_ball_point(cand_xy, radius)
 
 
-def max_coverage(demand_xy, weights, cand_xy, radius, p, existing_xy=None, bonus=None, min_gain=1e-9):
+def coverage_inputs(access, demand_xy, cand_xy, radius_m, existing_xy=None):
+    """مدخلات الوصول للتغطية القصوى: (قوائم الطلب المغطى لكل مرشح، قناع المغطى حالياً) بمسافات الشوارع إن توفرت."""
+    lists = access.cover_lists(np.asarray(cand_xy, float), np.asarray(demand_xy, float), radius_m)
+    covered = None
+    if existing_xy is not None and len(existing_xy):
+        d0, _ = access.walk_nearest(np.asarray(demand_xy, float), np.asarray(existing_xy, float), limit=radius_m * 2)
+        covered = d0 <= radius_m
+    return lists, covered
+
+
+def max_coverage(demand_xy, weights, cand_xy, radius, p, existing_xy=None, bonus=None, min_gain=1e-9, lists=None, covered=None):
     """يختار حتى p موقعاً من المرشحين لتعظيم الطلب المغطى ضمن radius (متر مستقيم) غير المغطى بالمواقع الحالية.
     bonus: مكافأة لكل مرشح (مثل قرب نقاط الجذب) تُضاف للمكسب. الخوارزمية جشعة مع تقييم كسول (ضمان 63%).
-    يرجع (جدول الاختيار، نسبة التغطية قبل/بعد)."""
+    lists: قوائم جاهزة (لكل مرشح فهارس الطلب المغطى) لاستعمال مسافات الشوارع؛ covered: قناع الطلب المغطى حالياً. يرجع (جدول الاختيار، نسبة التغطية قبل/بعد)."""
     w = np.asarray(weights, float)
     dxy = np.asarray(demand_xy, float)
-    covered = np.zeros(len(w), bool)
-    if existing_xy is not None and len(existing_xy):
+    covered = np.zeros(len(w), bool) if covered is None else np.asarray(covered, bool).copy()
+    if covered.any():
+        pass
+    elif existing_xy is not None and len(existing_xy):
         for lst in cKDTree(dxy).query_ball_point(np.asarray(existing_xy, float), radius):
             covered[lst] = True
     before = w[covered].sum() / max(w.sum(), 1e-9)
-    lists = [np.asarray(lst, int) for lst in _cover_lists(dxy, np.asarray(cand_xy, float), radius)]
+    lists = [np.asarray(lst, int) for lst in (lists if lists is not None else _cover_lists(dxy, np.asarray(cand_xy, float), radius))]
     bonus = np.zeros(len(lists)) if bonus is None else np.asarray(bonus, float)
     heap = [(-(w[lst][~covered[lst]].sum() + bonus[i]), i) for i, lst in enumerate(lists)]
     heapq.heapify(heap)

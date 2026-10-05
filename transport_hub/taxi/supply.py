@@ -5,6 +5,7 @@ import pandas as pd
 from scipy.optimize import linprog
 
 from transport_hub.core import geo
+from transport_hub.core.access import Access
 
 
 def zone_balance(trips, zones, hour, supply=None):
@@ -33,7 +34,7 @@ def zone_balance(trips, zones, hour, supply=None):
     return out
 
 
-def rebalance_plan(bal, min_move=0.5):
+def rebalance_plan(bal, min_move=0.5, access=None):
     """خطة نقل المركبات من مناطق الفائض لمناطق العجز بأقل مسافة كلية (نقل خطي، HiGHS).
     تعيد: من، إلى، عدد المركبات، المسافة كم."""
     sur = bal[bal["balance"] > min_move]
@@ -42,11 +43,7 @@ def rebalance_plan(bal, min_move=0.5):
         return pd.DataFrame(columns=["from", "to", "vehicles", "km"])
     s = np.floor(sur["balance"].to_numpy())
     dm = np.ceil(-dfc["balance"].to_numpy())
-    D = (
-        np.hypot(sur["x"].to_numpy()[:, None] - dfc["x"].to_numpy()[None, :], sur["y"].to_numpy()[:, None] - dfc["y"].to_numpy()[None, :])
-        * geo.DETOUR
-        / 1000
-    )
+    D = (access or Access()).drive_matrix(sur[["x", "y"]].to_numpy(), dfc[["x", "y"]].to_numpy(), "length") / 1000  # كم على الشوارع إن توفرت
     ns, nd = D.shape
     c = D.ravel()
     A_ub, b_ub = [], []

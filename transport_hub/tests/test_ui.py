@@ -87,3 +87,19 @@ bad()
     at = AppTest.from_string(code, default_timeout=60).run()
     assert not at.exception
     assert any("حدث خطأ غير متوقع" in m.value for m in at.markdown)
+
+
+def test_roads_toggle_switches_distance_mode(ws_env):
+    at = AppTest.from_string(script("p_transit"), default_timeout=300).run()
+    assert not at.exception, [e.value for e in at.exception]
+    texts = " ".join(c.value for c in at.caption)
+    assert "OSM" in texts  # المدينة التجريبية فيها شوارع: الوضع الافتراضي شبكة فعلية
+    at.toggle(key="hub_use_roads").set_value(False).run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert "تقدير" in " ".join(c.value for c in at.caption)
+
+
+def test_data_page_roads_tab_status(ws_env):
+    at = AppTest.from_string(script("p_data"), default_timeout=300).run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("حالة شبكة الشوارع" in m.value for m in at.markdown)

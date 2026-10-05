@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from transport_hub.core import geo
+from transport_hub.core.access import Access
 
 
 def zone_attraction(pop, poi, job_weight=1.0, poi_scale=100.0):
@@ -16,7 +17,7 @@ def zone_attraction(pop, poi, job_weight=1.0, poi_scale=100.0):
     return a
 
 
-def gravity(pop, poi, beta=0.25, trip_rate=2.5, top=40, max_zones=3000):
+def gravity(pop, poi, beta=0.25, trip_rate=2.5, top=40, max_zones=3000, access=None, network_max_zones=800):
     """نموذج جاذبية أحادي القيد: T_ij = P_i · A_j·exp(-β d_ij) / Σ_k A_k·exp(-β d_ik)، d بالكم (بعد التعرج).
     P_i = السكان × معدل الرحلات اليومية للفرد. يرجع (جدول المناطق: production, attraction, avg_trip_km)، (أعلى تدفقات)."""
     n = len(pop)
@@ -25,7 +26,11 @@ def gravity(pop, poi, beta=0.25, trip_rate=2.5, top=40, max_zones=3000):
     xy = pop[["x", "y"]].to_numpy()
     A = zone_attraction(pop, poi)
     P = pop["pop"].to_numpy(float) * trip_rate
-    d = np.hypot(xy[:, None, 0] - xy[None, :, 0], xy[:, None, 1] - xy[None, :, 1]) * geo.DETOUR / 1000 + 0.3
+    access = access or Access()
+    if access.mode == "osm" and n <= network_max_zones:
+        d = access.drive_matrix(xy, xy, "length") / 1000 + 0.3  # مسافة شوارع فعلية (باتجاهها)
+    else:  # الشبكة مكلفة للأحجام الكبيرة: نرجع للتقدير
+        d = np.hypot(xy[:, None, 0] - xy[None, :, 0], xy[:, None, 1] - xy[None, :, 1]) * geo.DETOUR / 1000 + 0.3
     f = A[None, :] * np.exp(-beta * d)
     np.fill_diagonal(f, f.diagonal() * 0.5)  # الرحلات داخل المنطقة أقل
     T = P[:, None] * f / f.sum(axis=1, keepdims=True).clip(1e-9)

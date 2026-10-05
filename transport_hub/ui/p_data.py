@@ -5,6 +5,7 @@ import streamlit as st
 
 from transport_hub.core import data as D
 from transport_hub.core import demo_city, geo, safety
+from transport_hub.core.access import load_access
 from transport_hub.ops import fleetmgmt as F
 from transport_hub.ops import performance as P
 from transport_hub.transit import gtfs
@@ -68,6 +69,7 @@ TEMPLATES = {
 
 
 DATASET_LABELS = {
+    "roads_lines": "شوارع OSM",
     "population": "السكان",
     "poi": "نقاط الجذب",
     "gtfs": "النقل العام (GTFS)",
@@ -118,8 +120,71 @@ def load_demo():
     _store("avl", avl, "demo")
     _store("apc", apc, "demo")
     _store("register", demo_city.vehicle_register(), "demo")
+    _store("roads_lines", demo_city.street_lines(), "demo", obj=True)
     w.log("demo_loaded")
     st.cache_data.clear()
+
+
+def _roads_tab(w):
+    from transport_hub.core import roadnet
+
+    st.caption(
+        "شوارع OSM تستبدل التقدير (مستقيم × 1.3) بمسافات المشي والقيادة الفعلية: اتجاه واحد، جسور، حواجز مثل الأنهار والسكك. "
+        "الصيغ: GeoJSON، أو zip لـ shapefile من Geofabrik (حقول fclass وoneway وmaxspeed)، أو GPKG. الملفات الكبيرة تُقصّ تلقائياً لمنطقة السكان."
+    )
+    pop = U.get("population")
+    bbox = None
+    if pop is not None:
+        m = 0.03
+        bbox = (float(pop["lon"].min() - m), float(pop["lat"].min() - m), float(pop["lon"].max() + m), float(pop["lat"].max() + m))
+    up = st.file_uploader("ملف الشوارع", type=["geojson", "json", "zip", "gpkg"], key="hub_up_roads")
+    if up is not None and st.button("اعتمد الشوارع", key="hub_ok_roads"):
+        try:
+            safety.check_size(up.size)
+            lines = roadnet.read_roads(up.getvalue(), up.name, bbox=bbox)
+            if bbox:
+                lines = lines.clip(bbox)
+            if len(lines) == 0:
+                raise roadnet.RoadDataError("لا شوارع داخل منطقة السكان: تأكد أن الملف يغطي نفس المدينة")
+            _store("roads_lines", lines, obj=True)
+            st.cache_data.clear()
+            st.rerun()
+        except Exception as e:
+            st.error(str(e))
+    if bbox and st.button("تنزيل الشوارع من OpenStreetMap (Overpass) لمنطقة السكان", key="hub_overpass"):
+        area = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
+        if area > 0.6:
+            st.error("المنطقة كبيرة على Overpass؛ حمّل ملف المنطقة من Geofabrik وارفعه أعلاه")
+        else:
+            try:
+                with st.spinner("جاري التنزيل…"):
+                    lines = roadnet.fetch_overpass(bbox)
+                _store("roads_lines", lines, obj=True)
+                st.cache_data.clear()
+                st.rerun()
+            except Exception as e:  # noqa: BLE001
+                st.error(f"تعذر التنزيل ({type(e).__name__}). تحقق من الاتصال، أو ارفع الملف يدوياً.")
+    if U.has_roads():
+        U.section("حالة شبكة الشوارع")
+        net = load_access(w, True).net
+        s = net.summary()
+        linked = 100 * float((net.snap(pop[["x", "y"]].to_numpy(), "walk")[0] >= 0).mean()) if pop is not None else None
+        U.kpis(
+            [
+                (f"{s['km']:,.0f}", "كم شوارع"),
+                (f"{s['nodes']:,}", "عقدة"),
+                (f"{s['oneway_pct']:.0f}%", "اتجاه واحد"),
+                (f"{linked:.0f}%" if linked is not None else "—", "مناطق مرتبطة بالشبكة (≤ 300 م)", "ok" if (linked or 0) >= 95 else "mid"),
+            ]
+        )
+        if linked is not None and linked < 95:
+            st.warning("جزء من المناطق بعيد عن الشوارع المحمّلة (يُقدَّر بالخط المستقيم). تأكد أن الملف يغطي كل المدينة.")
+        if st.button("إزالة الشوارع (الرجوع للتقدير)", key="hub_rm_roads"):
+            w.delete("roads_lines")
+            st.cache_data.clear()
+            st.rerun()
+    else:
+        U.empty("لا شوارع محمّلة بعد: المسافات الآن تقدير (مستقيم × 1.3).")
 
 
 def render():
@@ -143,7 +208,7 @@ def render():
         st.cache_data.clear()
         st.rerun()
 
-    tabs = st.tabs(["السكان", "نقاط الجذب", "النقل العام (GTFS)", "التاكسي", "التشغيل", "قوالب", "فحص الجودة"])
+    tabs = st.tabs(["السكان", "نقاط الجذب", "النقل العام (GTFS)", "التاكسي", "التشغيل", "الشوارع (OSM)", "قوالب", "فحص الجودة"])
     with tabs[0]:
         st.caption("الأعمدة المطلوبة: zone_id, pop, lon, lat. اختيارية: name, district, jobs, students, low_income.")
         up = st.file_uploader("ملف السكان (CSV)", type="csv", key="hub_up_pop")
@@ -225,9 +290,11 @@ def render():
                 except Exception as e:
                     st.error(str(e))
     with tabs[5]:
+        _roads_tab(w)
+    with tabs[6]:
         for name, df in TEMPLATES.items():
             U.download_df(f"قالب: {name}", df, f"template_{name}.csv", f"hub_tpl_{name}")
-    with tabs[6]:
+    with tabs[7]:
         feed = U.feed_obj()
         rep = D.quality_report(U.get("population"), U.get("poi"), U.get("trips"), gtfs.validate(feed) if feed else None, w.obj("load_report"))
         if rep.empty:

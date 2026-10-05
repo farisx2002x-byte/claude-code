@@ -229,3 +229,37 @@ def vehicle_register(n=45, seed=9):
             "last_service_date": ld.date,
         }
     )
+
+
+def street_lines(spacing_km=0.25, river_y_km=4.0, bridge_x_km=4.0):
+    """شبكة شوارع اصطناعية للمدينة التجريبية: شوارع كل 250 م، شرايين كل كم، شوارع باتجاه واحد متبادلة،
+    ونهر أفقي عند y=4 كم لا يُعبر إلا من جسر واحد عند x=4 كم (يجعل المسافات الفعلية أطول من المستقيمة)."""
+    from transport_hub.core.roadnet import Lines
+
+    size = N * CELL_KM
+    ticks = np.arange(0, size + 1e-9, spacing_km)
+    co, fc, ow = [], [], []
+
+    def add(pts_km, cls, oneway):
+        a = np.array(pts_km)
+        lon, lat = _lonlat(a[:, 0], a[:, 1])
+        co.append(np.column_stack([lon, lat]))
+        fc.append(cls)
+        ow.append(oneway)
+
+    for k, v in enumerate(ticks):
+        arterial = abs(v / 1.0 - round(v / 1.0)) < 1e-9
+        cls = "secondary" if arterial else "residential"
+        # شارع شرق-غرب (ثابت y=v) إلا على ضفة النهر
+        if abs(v - river_y_km) > 1e-9:
+            add([(x, v) for x in ticks], cls, "B" if arterial else ("F" if k % 2 else "T"))
+        # شارع شمال-جنوب (ثابت x=v): قسمان تحت وفوق النهر إلا الجسر
+        south = [(v, y) for y in ticks if y < river_y_km - 1e-9]
+        north = [(v, y) for y in ticks if y > river_y_km + 1e-9]
+        way = "B" if arterial else ("F" if k % 2 else "T")
+        if abs(v - bridge_x_km) < 1e-9:
+            add([(v, y) for y in ticks if abs(y - river_y_km) > 1e-9], "primary", "B")  # الجسر: قفزة بين الضفتين
+        else:
+            add(south, cls, way)
+            add(north, cls, way)
+    return Lines(co, fc, ow, [np.nan] * len(co))

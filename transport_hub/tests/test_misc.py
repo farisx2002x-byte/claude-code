@@ -13,7 +13,7 @@ from transport_hub.transit import csa, gtfs
 def test_version_single_source():
     from transport_hub.exports import meta
 
-    assert meta.VERSION == __version__ == "1.1.0"
+    assert meta.VERSION == __version__ == "1.2.0"
     import re
     from pathlib import Path
 

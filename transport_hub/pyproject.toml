@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "transport-hub"
-version = "1.1.0"
+version = "1.2.0"
 description = "منصة النقل: نقل عام، تاكسي، نقل مدرسي، اختيار مواقع، نقاط جذب، إدارة وتقارير"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -15,7 +15,8 @@ dependencies = [
 
 [project.optional-dependencies]
 api = ["fastapi", "httpx", "uvicorn"]
-dev = ["pytest", "pytest-cov", "ruff", "fastapi", "httpx", "uvicorn"]
+gis = ["geopandas", "pyogrio"]          # قراءة shapefile/GPKG للشوارع (GeoJSON لا يحتاجها)
+dev = ["pytest", "pytest-cov", "ruff", "fastapi", "httpx", "uvicorn", "geopandas", "pyogrio"]
 
 [project.scripts]
 transport-hub = "transport_hub.cli:main"

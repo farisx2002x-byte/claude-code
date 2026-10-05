@@ -16,6 +16,7 @@ def render():
         "أفضل أماكن المحطات والمواقف والمستودعات ومراكز الشحن، بثلاث طرق.",
         "**معايير متعددة**: أوزان قابلة للتعديل لكل معيار.  \n**أقصى تغطية**: يعظّم السكان المخدومين ضمن نصف القطر.  \n**p-median**: يقلل المسافة للأقرب (مراكز/مستودعات).",
     )
+    U.access_bar()
     d = U.require("population")
     if d is None:
         return
@@ -88,7 +89,10 @@ def render():
         U.table(sel[show].round(2))
     elif method == "أقصى تغطية":
         dxy = pop[["x", "y"]].to_numpy()
-        sel, (b, a) = SC.max_coverage(dxy, pop["pop"].to_numpy(float), cand[["x", "y"]].to_numpy(), radius / geo.DETOUR, int(n), existing)
+        lists, covered = SC.coverage_inputs(U.access(), dxy, cand[["x", "y"]].to_numpy(), radius, existing)
+        sel, (b, a) = SC.max_coverage(
+            dxy, pop["pop"].to_numpy(float), cand[["x", "y"]].to_numpy(), radius / geo.DETOUR, int(n), lists=lists, covered=covered
+        )
         sel["lon"], sel["lat"] = proj.lonlat(sel["x"], sel["y"])
         U.kpis([(f"{b:.1f}% → {a:.1f}%", "السكان المغطون"), (int(sel["gain"].sum()), "سكان جدد")])
         U.deck([U.scatter(pop, [160, 160, 160], size_col=200, opacity=0.4), U.scatter(sel, [230, 120, 0], size_col=cell * 0.7)])

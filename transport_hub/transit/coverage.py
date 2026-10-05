@@ -2,9 +2,9 @@
 
 import numpy as np
 import pandas as pd
-from scipy.spatial import cKDTree
 
 from transport_hub.core import geo
+from transport_hub.core.access import Access
 
 GRADES = [(2.5, "1 — ضعيف جداً"), (5, "2 — ضعيف"), (10, "3 — متوسط"), (15, "4 — جيد"), (20, "5 — جيد جداً"), (1e9, "6 — ممتاز")]
 SWT_EXTRA_MIN = 2.0  # زمن إضافي لعدم الانتظام (تقديري)
@@ -24,37 +24,33 @@ def stops_frame(feed, proj):
     return s
 
 
-def coverage(demand, stops_xy, radii=(400, 800)):
-    """لكل منطقة طلب: المسافة (الفعلية بعد التعرج) لأقرب محطة، وهل هي مغطاة عند كل نصف قطر."""
-    d, _ = geo.nearest(demand[["x", "y"]].to_numpy(), stops_xy)
+def coverage(demand, stops_xy, radii=(400, 800), access=None):
+    """لكل منطقة طلب: مسافة المشي لأقرب محطة (على شبكة الشوارع إن توفرت، وإلا مستقيم × معامل التعرج)، وهل هي مغطاة عند كل نصف قطر."""
+    access = access or Access()
+    d, _ = access.walk_nearest(demand[["x", "y"]].to_numpy(), np.asarray(stops_xy, float), limit=max(max(radii) * 3, 3000))
     out = demand.copy()
-    out["walk_to_stop_m"] = d * geo.DETOUR
+    out["walk_to_stop_m"] = d
     for r in radii:
         out[f"covered_{r}"] = out["walk_to_stop_m"] <= r
     return out
 
 
-def accessibility_index(demand, stops, stop_route, walk_max=WALK_MAX_M):
+def accessibility_index(demand, stops, stop_route, walk_max=WALK_MAX_M, access=None):
     """مؤشر مستوى الخدمة لكل منطقة: لكل خط نأخذ أفضل محطة (مشي + نصف التردد + زمن إضافي)، EDF = 30/زمن،
-    المؤشر = أعلى EDF + 0.5 × مجموع الباقي. stop_route: stop_id, route_id, headway_min."""
-    tree = cKDTree(stops[["x", "y"]].to_numpy())
-    near = tree.query_ball_point(demand[["x", "y"]].to_numpy(), walk_max / geo.DETOUR)
-    sr = stop_route.set_index("stop_id")
-    sidx = stops["stop_id"].values
+    المؤشر = أعلى EDF + 0.5 × مجموع الباقي. stop_route: stop_id, route_id, headway_min. مسافات المشي من access."""
+    access = access or Access()
+    t, s, dist = access.cover(demand[["x", "y"]].to_numpy(), stops[["x", "y"]].to_numpy(), walk_max)
+    sr = stop_route.groupby("stop_id")[["route_id", "headway_min"]].apply(lambda g: list(zip(g["route_id"], g["headway_min"], strict=True))).to_dict()
+    sid = stops["stop_id"].to_numpy()
+    per_demand = {}
+    for ti, si, di in zip(t, s, dist, strict=True):
+        per_demand.setdefault(si, []).append((sid[ti], di))
     ai = np.zeros(len(demand))
-    dx, dy = demand["x"].to_numpy(), demand["y"].to_numpy()
-    sx, sy = stops["x"].to_numpy(), stops["y"].to_numpy()
-    for i, nb in enumerate(near):
-        if not nb:
-            continue
+    for i, nb in per_demand.items():
         best = {}
-        for j in nb:
-            sid = sidx[j]
-            if sid not in sr.index:
-                continue
-            walk = geo.walk_minutes(np.hypot(sx[j] - dx[i], sy[j] - dy[i]))
-            rows = sr.loc[[sid]]
-            for rid, hw in zip(rows["route_id"], rows["headway_min"]):
+        for stop_id, d in nb:
+            walk = d / (geo.WALK_KMH * 1000 / 60)
+            for rid, hw in sr.get(stop_id, ()):
                 wt = walk + 0.5 * hw + SWT_EXTRA_MIN
                 if rid not in best or wt < best[rid]:
                     best[rid] = wt

@@ -44,8 +44,9 @@ def collect(sig_):
 
         st_ = COV.stops_frame(feed, proj)
         sr = service.stop_route_freq(feed)
-        k, cov = planning.scenario_kpis(pop, st_, sr)
-        rm = service.route_metrics(feed, proj=proj)
+        acc = U.access()
+        k, cov = planning.scenario_kpis(pop, st_, sr, access=acc)
+        rm = service.route_metrics(feed, proj=proj, access=acc)
         vals.update(
             transit_cov400=k["covered_400_pct"],
             transit_cov800=k["covered_800_pct"],
@@ -64,7 +65,7 @@ def collect(sig_):
             vals["taxi_util"] = 100 * k["نسبة الإشغال (وقت الرحلات)"]
         st_df = U.get("stands")
         if st_df is not None:
-            vals["taxi_stand_cov"] = tstands.stand_coverage(trips, st_df[["x", "y"]].to_numpy(), 300)
+            vals["taxi_stand_cov"] = tstands.stand_coverage(trips, st_df[["x", "y"]].to_numpy(), 300, U.access())
         tables["taxi_kpis"] = pd.DataFrame({"المؤشر": list(k), "القيمة": list(k.values())})
     avl, apc, reg = U.get("avl"), U.get("apc"), U.get("register")
     if avl is not None:

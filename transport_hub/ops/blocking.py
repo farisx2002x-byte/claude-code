@@ -7,13 +7,13 @@ from scipy.optimize import linear_sum_assignment
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import maximum_bipartite_matching
 
-from transport_hub.core import geo
+from transport_hub.core.access import Access
 
 DEADHEAD_KMH = 30.0
 BIG = 1e9
 
 
-def trip_endpoints(feed, proj, weekday=None):
+def trip_endpoints(feed, proj, weekday=None, access=None):
     """جدول الرحلات مع أول/آخر محطة وإحداثياتها: trip_id, route_id, start, end, from_x/y, to_x/y, km."""
     from transport_hub.transit.service import trip_table
 
@@ -26,19 +26,36 @@ def trip_endpoints(feed, proj, weekday=None):
     seg = st.sort_values(["trip_id", "stop_sequence"]).copy()
     seg["dx"] = seg.groupby("trip_id")["x"].diff()
     seg["dy"] = seg.groupby("trip_id")["y"].diff()
-    km = (np.hypot(seg["dx"].fillna(0), seg["dy"].fillna(0)) * geo.DETOUR).groupby(seg["trip_id"]).sum() / 1000
+    access = access or Access()
+    seg["px"] = seg.groupby("trip_id")["x"].shift()
+    seg["py"] = seg.groupby("trip_id")["y"].shift()
+    legs = seg.dropna(subset=["px"])[["trip_id", "px", "py", "x", "y"]].copy()
+    uniq = legs[["px", "py", "x", "y"]].round(1).drop_duplicates().reset_index(drop=True)
+    uniq["d"] = access.drive_pairs(uniq[["px", "py"]].to_numpy(), uniq[["x", "y"]].to_numpy(), "length")  # الحافلة تتبع الشوارع واتجاهها الواحد
+    legs = legs.assign(px=legs["px"].round(1), py=legs["py"].round(1), x=legs["x"].round(1), y=legs["y"].round(1)).merge(
+        uniq, on=["px", "py", "x", "y"], how="left"
+    )
+    km = legs.groupby("trip_id")["d"].sum() / 1000
     out = t.merge(first, left_on="trip_id", right_index=True).merge(last, left_on="trip_id", right_index=True)
     out["km"] = out["trip_id"].map(km)
     return out.sort_values("start").reset_index(drop=True)
 
 
-def _compat(trips, layover_s, max_gap_s, max_deadhead_km):
+def _deadhead(trips, access):
+    """مصفوفة التوصيل الفارغ من نهاية كل رحلة لبداية كل رحلة (مسافة م وزمن ث) على الشوارع (باتجاهها) أو بالتقدير. تُحسب على النقاط الفريدة فقط."""
+    ends = trips[["to_x", "to_y"]].round(1).to_numpy()
+    starts = trips[["from_x", "from_y"]].round(1).to_numpy()
+    ue, ie = np.unique(ends, axis=0, return_inverse=True)
+    us, is_ = np.unique(starts, axis=0, return_inverse=True)
+    dm = access.drive_matrix(ue, us, "length")
+    ds = access.drive_matrix(ue, us, "time")
+    return dm[np.ix_(ie.ravel(), is_.ravel())], ds[np.ix_(ie.ravel(), is_.ravel())]
+
+
+def _compat(trips, layover_s, max_gap_s, max_deadhead_km, access=None):
     """مصفوفة التوافق: الرحلة j تلي i لو وصلنا النهاية + استراحة + وقت التوصيل الفارغ قبل بدء j، وبدون انتظار أطول من max_gap."""
     end, start = trips["end"].to_numpy(), trips["start"].to_numpy()
-    tx, ty = trips["to_x"].to_numpy(), trips["to_y"].to_numpy()
-    fx, fy = trips["from_x"].to_numpy(), trips["from_y"].to_numpy()
-    dh_m = np.hypot(tx[:, None] - fx[None, :], ty[:, None] - fy[None, :]) * geo.DETOUR
-    dh_s = dh_m / (DEADHEAD_KMH / 3.6)
+    dh_m, dh_s = _deadhead(trips, access or Access())
     ready = end[:, None] + layover_s + dh_s
     ok = (ready <= start[None, :]) & (start[None, :] - ready <= max_gap_s) & (dh_m <= max_deadhead_km * 1000)
     np.fill_diagonal(ok, False)
@@ -46,12 +63,13 @@ def _compat(trips, layover_s, max_gap_s, max_deadhead_km):
     return ok, wait, dh_m
 
 
-def build_blocks(trips, layover_min=5, max_gap_min=90, minimize_cost=True, depot_xy=None, max_deadhead_km=3.0):
+def build_blocks(trips, layover_min=5, max_gap_min=90, minimize_cost=True, depot_xy=None, max_deadhead_km=3.0, access=None):
     """يرجع (blocks: جدول رحلة→مركبة، summary). عدد المركبات = n − حجم المطابقة العظمى (مسار أدنى في مخطط الاتجاه الأحادي).
     minimize_cost: بين الحلول بنفس عدد المركبات يختار أقل انتظار وتوصيل فارغ (n ≤ 2500)."""
     trips = trips.reset_index(drop=True)
     n = len(trips)
-    ok, wait, dh_m = _compat(trips, layover_min * 60, max_gap_min * 60, max_deadhead_km)
+    access = access or Access()
+    ok, wait, dh_m = _compat(trips, layover_min * 60, max_gap_min * 60, max_deadhead_km, access)
     if n <= 2500 and minimize_cost:
         cost = np.where(ok, wait / 60 + dh_m / 1000 * 6, BIG)
         r, c = linear_sum_assignment(cost)
@@ -75,12 +93,13 @@ def build_blocks(trips, layover_min=5, max_gap_min=90, minimize_cost=True, depot
             i = nxt[i]
         v += 1
     blocks = trips.assign(vehicle=veh, seq=seq).sort_values(["vehicle", "seq"]).reset_index(drop=True)
-    summary = block_stats(blocks, trips, depot_xy)
+    summary = block_stats(blocks, trips, depot_xy, access)
     return blocks, summary
 
 
-def block_stats(blocks, trips, depot_xy=None):
+def block_stats(blocks, trips, depot_xy=None, access=None):
     """إحصاءات: المركبات، ساعات الخدمة والاستراحة، التوصيل الفارغ، الإشغال، والحد الأدنى النظري (أقصى تزامن للرحلات)."""
+    access = access or Access()
     ev = np.concatenate([np.ones(len(trips)), -np.ones(len(trips))])
     t = np.concatenate([trips["start"].to_numpy(), trips["end"].to_numpy()])
     peak = int(np.max(np.cumsum(ev[np.lexsort((ev, t))])))  # النهايات قبل البدايات عند التساوي
@@ -90,17 +109,19 @@ def block_stats(blocks, trips, depot_xy=None):
     for _, g in blocks.groupby("vehicle"):
         a, b = g.iloc[:-1], g.iloc[1:]
         if len(a):
-            d = np.hypot(a["to_x"].to_numpy() - b["from_x"].to_numpy(), a["to_y"].to_numpy() - b["from_y"].to_numpy()) * geo.DETOUR
+            ends, starts = a[["to_x", "to_y"]].to_numpy(), b[["from_x", "from_y"]].to_numpy()
+            d = access.drive_pairs(ends, starts, "length")
+            tsec = access.drive_pairs(ends, starts, "time")
             dead_km += d.sum() / 1000
-            idle_h += float((b["start"].to_numpy() - a["end"].to_numpy() - d / (DEADHEAD_KMH / 3.6)).sum() / 3600)
+            idle_h += float((b["start"].to_numpy() - a["end"].to_numpy() - tsec).sum() / 3600)
         if depot_xy is not None:
             first, last = g.iloc[0], g.iloc[-1]
-            pull_km += (
+            dep = np.array([depot_xy], float)
+            pull_km += float(
                 (
-                    np.hypot(first["from_x"] - depot_xy[0], first["from_y"] - depot_xy[1])
-                    + np.hypot(last["to_x"] - depot_xy[0], last["to_y"] - depot_xy[1])
+                    access.drive_pairs(dep, np.array([[first["from_x"], first["from_y"]]]), "length")[0]
+                    + access.drive_pairs(np.array([[last["to_x"], last["to_y"]]]), dep, "length")[0]
                 )
-                * geo.DETOUR
                 / 1000
             )
     veh = blocks["vehicle"].nunique()

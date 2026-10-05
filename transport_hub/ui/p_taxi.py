@@ -14,6 +14,7 @@ def render():
         "الطلب والنقاط الساخنة وتوازن العرض وحجم الأسطول والمواقف.",
         "حجم الأسطول بنموذج طوابير (Erlang C) لهدف انتظار محدد. العرض مقدّر من التوصيلات إن لم تتوفر مواقع المركبات.",
     )
+    U.access_bar()
     d = U.require("trips", "population")
     if d is None:
         return
@@ -81,7 +82,7 @@ def render():
                 )
             ]
         )
-        plan = supply.rebalance_plan(bal)
+        plan = supply.rebalance_plan(bal, access=U.access())
         st.markdown("**خطة إعادة التوزيع (أقل مسافة كلية)**")
         if plan.empty:
             st.caption("لا حاجة لإعادة توزيع في هذه الساعة.")
@@ -119,8 +120,8 @@ def render():
         c = st.columns(3)
         n = c[0].number_input("عدد المواقف الجديدة", 1, 50, 8, key="hub_x_nst")
         rad = c[1].number_input("مسافة المشي (م)", 100, 800, 300, 50, key="hub_x_srad")
-        cov0 = stands.stand_coverage(trips, ex, rad)
-        sel, (b, a) = stands.suggest_stands(trips, ex, int(n), rad, proj=proj)
+        cov0 = stands.stand_coverage(trips, ex, rad, U.access())
+        sel, (b, a) = stands.suggest_stands(trips, ex, int(n), rad, proj=proj, access=U.access())
         U.kpis([(f"{cov0:.0f}%", "الالتقاطات المغطاة حالياً"), (f"{a:.0f}%", "بعد المواقع الجديدة", "ok"), (len(ex), "مواقف حالية")])
         layers = [U.scatter(sel, [230, 120, 0], size_col=140)]
         if st_df is not None:

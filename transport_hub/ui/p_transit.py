@@ -19,19 +19,19 @@ def _cov(sig_, walk_radii):
     pop = U.get("population")
     st_ = COV.stops_frame(feed, proj)
     sr = service.stop_route_freq(feed)
-    k, cov = planning.scenario_kpis(pop, st_, sr, radii=walk_radii)
+    k, cov = planning.scenario_kpis(pop, st_, sr, radii=walk_radii, access=U.access())
     return k, cov, st_, sr
 
 
 @st.cache_data(show_spinner=False)
 def _routes(sig_):
     feed, proj = U.feed_obj(), U.proj()
-    return service.route_metrics(feed, proj=proj), service.headways(feed), service.hubs(feed, proj)
+    return service.route_metrics(feed, proj=proj, access=U.access()), service.headways(feed), service.hubs(feed, proj)
 
 
 @st.cache_resource(show_spinner="جاري تجهيز محرك الرحلات…")
 def _router(sig_):
-    return csa.Router(U.feed_obj(), U.proj())
+    return csa.Router(U.feed_obj(), U.proj(), access=U.access())
 
 
 def render():
@@ -41,6 +41,7 @@ def render():
         "تغطية السكان، مستوى الخدمة، الوصول بالزمن، وتخطيط محطات وخطوط جديدة.",
         "**مؤشر الخدمة** (على طريقة PTAL) يجمع المشي والتردد: 1 ضعيف جداً … 6 ممتاز.  \n**الوصول بالزمن**: ماذا أبلغ خلال X دقيقة شاملاً المشي والتبديل.  \n المسافات مستقيمة × 1.3 (تقدير).",
     )
+    U.access_bar()
     d = U.require("population", "gtfs", what="")
     if d is None:
         return
@@ -151,7 +152,7 @@ def render():
             kk = c[0].number_input("عدد المحطات", 1, 100, 10, key="hub_t_k")
             rad = c[1].number_input("مسافة المشي (م)", 200, 1000, 400, 50, key="hub_t_rad")
             pw = c[2].slider("وزن قرب نقاط الجذب", 0.0, 1.0, 0.2, 0.05, key="hub_t_pw")
-            sel, (b, a) = planning.suggest_stops(pop, ex, cand, rad, int(kk), poi, pw, proj)
+            sel, (b, a) = planning.suggest_stops(pop, ex, cand, rad, int(kk), poi, pw, proj, U.access())
             U.kpis([(f"{b:.1f}% → {a:.1f}%", f"التغطية عند {rad} م"), (int(sel["gain"].sum()), "سكان جدد")])
             U.deck(
                 [
@@ -168,7 +169,9 @@ def render():
             hwy = c[1].number_input("التردد (د)", 3, 60, 10, key="hub_t_lh")
             spd = c[2].number_input("السرعة التجارية كم/س", 10, 50, 20, key="hub_t_ls")
             rad = c[3].number_input("مسافة المشي (م)", 200, 1000, 400, 50, key="hub_t_lr")
-            line, info = planning.suggest_line(pop, ex, hubs[["x", "y"]].to_numpy() if len(hubs) else None, cand, int(n), rad, hwy, spd, proj=proj)
+            line, info = planning.suggest_line(
+                pop, ex, hubs[["x", "y"]].to_numpy() if len(hubs) else None, cand, int(n), rad, hwy, spd, proj=proj, access=U.access()
+            )
             if line.empty:
                 U.empty("ما فيه مناطق غير مخدومة تستحق خطاً جديداً.")
             else:
@@ -204,14 +207,14 @@ def render():
                     from transport_hub.admin.scenarios import ScenarioBook
 
                     add = [dict(x=r_.x, y=r_.y, route_id="NEW1", headway_min=hwy) for r_ in line.itertuples()]
-                    kk2, _ = planning.scenario_kpis(pop, stops, sr, add_stops=add)
+                    kk2, _ = planning.scenario_kpis(pop, stops, sr, add_stops=add, access=U.access())
                     ScenarioBook(U.ws()).save(f"خط جديد ({n} محطة، {hwy} د)", dict(info), kk2)
                     st.success("حُفظ في سجل السيناريوهات (صفحة الإدارة)")
         else:
             routes = rm["route_id"].tolist()
             sel_r = st.multiselect("الخطوط", routes, key="hub_t_hr")
             f = st.slider("معامل التردد (0.5 = ضعف الخدمة، 2 = نصفها)", 0.3, 3.0, 0.5, 0.1, key="hub_t_hf")
-            k2, _ = planning.scenario_kpis(pop, stops, sr, headway_factor={r_: f for r_ in sel_r})
+            k2, _ = planning.scenario_kpis(pop, stops, sr, headway_factor={r_: f for r_ in sel_r}, access=U.access())
             base = {**k}
             U.table(pd.DataFrame({"المؤشر": list(base), "الأساس": [float(v) for v in base.values()], "السيناريو": [float(v) for v in k2.values()]}))
             if st.button("احفظ كسيناريو", key="hub_t_save_hw"):

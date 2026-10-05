@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from transport_hub.core import geo
+from transport_hub.core.access import load_access
 from transport_hub.core.store import Workspace
 from transport_hub.exports import meta as META
 from transport_hub.exports.excel import Sheet
@@ -15,10 +16,10 @@ def _get(ws, name):
 
 
 def available(ws):
-    return {k: ws.has(k) for k in ("population", "poi", "gtfs", "trips", "stands", "avl", "apc", "register")}
+    return {k: ws.has(k) for k in ("population", "poi", "gtfs", "trips", "stands", "avl", "apc", "register", "roads_lines")}
 
 
-def assemble(ws: Workspace | None = None, radius=400, k_new=10, k_stands=8, wait_target=5.0):
+def assemble(ws: Workspace | None = None, radius=400, k_new=10, k_stands=8, wait_target=5.0, use_roads=True):
     """يرجع (meta, sheets, sections, geo_tables). يتخطى الوحدات التي بياناتها غير متوفرة ويذكرها في ملاحظات الغلاف."""
     from transport_hub.admin import equity, scorecard
     from transport_hub.taxi import demand as TD
@@ -29,6 +30,7 @@ def assemble(ws: Workspace | None = None, radius=400, k_new=10, k_stands=8, wait
     from transport_hub.transit import planning, ridership, service
 
     ws = ws or Workspace()
+    access = load_access(ws, use_roads)
     have = available(ws)
     meta_idx = ws.meta()
     datasets = {
@@ -36,7 +38,13 @@ def assemble(ws: Workspace | None = None, radius=400, k_new=10, k_stands=8, wait
         for k, v in have.items()
         if v
     }
-    params = {"نصف قطر المشي (م)": radius, "محطات جديدة مقترحة": k_new, "مواقف تاكسي مقترحة": k_stands, "انتظار التاكسي المستهدف (د)": wait_target}
+    params = {
+        "نصف قطر المشي (م)": radius,
+        "محطات جديدة مقترحة": k_new,
+        "مواقف تاكسي مقترحة": k_stands,
+        "انتظار التاكسي المستهدف (د)": wait_target,
+        "طريقة المسافات": access.label(),
+    }
     notes, sheets, sections, geo_tables = [], [], [], {}
     vals = {}
     pop = _get(ws, "population") if have["population"] else None
@@ -46,8 +54,8 @@ def assemble(ws: Workspace | None = None, radius=400, k_new=10, k_stands=8, wait
         feed = G.from_tables(_get(ws, "gtfs"))
         st = COV.stops_frame(feed, proj)
         sr = service.stop_route_freq(feed)
-        k, cov = planning.scenario_kpis(pop, st, sr, radii=tuple(sorted({400, 800, int(radius)})))
-        rm = service.route_metrics(feed, proj=proj)
+        k, cov = planning.scenario_kpis(pop, st, sr, radii=tuple(sorted({400, 800, int(radius)})), access=access)
+        rm = service.route_metrics(feed, proj=proj, access=access)
         _, _, br = ridership.estimate(cov, st, sr)
         prod = ridership.productivity(br, rm)
         hubs = service.hubs(feed, proj)
@@ -63,7 +71,9 @@ def assemble(ws: Workspace | None = None, radius=400, k_new=10, k_stands=8, wait
             equity_gini=g,
         )
         cand = geo.candidate_grid(pop["x"], pop["y"], 250)
-        sel, (b, a) = planning.suggest_stops(pop, st[["x", "y"]].to_numpy(), cand, radius, k_new, _get(ws, "poi") if have["poi"] else None, 0.2, proj)
+        sel, (b, a) = planning.suggest_stops(
+            pop, st[["x", "y"]].to_numpy(), cand, radius, k_new, _get(ws, "poi") if have["poi"] else None, 0.2, proj, access
+        )
         geo_tables["محطات_مقترحة"] = sel[["rank", "gain", "cum_covered_pct", "lon", "lat"]]
         cv = proj.attach_lonlat(cov)
         grade_groups = []
@@ -131,14 +141,14 @@ def assemble(ws: Workspace | None = None, radius=400, k_new=10, k_stands=8, wait
         hs = TD.hotspots(trips, 400, 0.5, None, proj)
         fh = TF.fleet_by_hour(trips, wait_target, 6.0, 0.75)
         ex = _get(ws, "stands")[["x", "y"]].to_numpy() if have["stands"] else np.zeros((0, 2))
-        sel2, (b2, a2) = TS.suggest_stands(trips, ex, k_stands, 300, proj=proj)
+        sel2, (b2, a2) = TS.suggest_stands(trips, ex, k_stands, 300, proj=proj, access=access)
         geo_tables["نقاط_ساخنة_تاكسي"] = hs[["rank", "trips_per_day", "share_pct", "peak_hour", "lon", "lat"]]
         geo_tables["مواقف_مقترحة"] = sel2[["rank", "trips_per_day", "cum_covered_pct", "lon", "lat"]]
         if "متوسط الانتظار د" in kp:
             vals["taxi_wait"] = kp["متوسط الانتظار د"]
         if "نسبة الإشغال (وقت الرحلات)" in kp:
             vals["taxi_util"] = 100 * kp["نسبة الإشغال (وقت الرحلات)"]
-        vals["taxi_stand_cov"] = TS.stand_coverage(trips, ex, 300)
+        vals["taxi_stand_cov"] = TS.stand_coverage(trips, ex, 300, access)
         sheets += [
             Sheet("التاكسي - مؤشرات", pd.DataFrame({"المؤشر": list(kp), "القيمة": list(kp.values())}), "مؤشرات التاكسي"),
             Sheet("التاكسي - نقاط ساخنة", hs[["rank", "trips_per_day", "share_pct", "peak_hour", "cells", "lon", "lat"]], "النقاط الساخنة للطلب"),
@@ -180,7 +190,7 @@ def assemble(ws: Workspace | None = None, radius=400, k_new=10, k_stands=8, wait
         from transport_hub.ops import blocking as B
 
         feed = G.from_tables(_get(ws, "gtfs"))
-        blocks, bs = B.build_blocks(B.trip_endpoints(feed, proj))
+        blocks, bs = B.build_blocks(B.trip_endpoints(feed, proj, access=access), access=access)
         duty, ds = B.duties(blocks)
         vt = B.vehicle_table(blocks)
         sheets += [
@@ -258,7 +268,7 @@ def assemble(ws: Workspace | None = None, radius=400, k_new=10, k_stands=8, wait
                 table=sc.drop(columns="key"),
             ),
         )
-    meta = META.build("تقرير أداء منظومة النقل", params, datasets, notes, demo=ws.is_demo())
+    meta = META.build("تقرير أداء منظومة النقل", params, datasets, notes, demo=ws.is_demo(), access_mode=access.mode)
     return meta, sheets, sections, geo_tables
 
 

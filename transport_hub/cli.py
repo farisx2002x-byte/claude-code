@@ -12,7 +12,7 @@ def main(argv=None):
     ap.add_argument("--headless", action="store_true")
     a = ap.parse_args(argv)
     app = Path(__file__).resolve().parent / "app.py"
-    cmd = [sys.executable, "-m", "streamlit", "run", str(app), "--server.port", str(a.port)]
+    cmd = [sys.executable, "-m", "streamlit", "run", str(app), "--server.port", str(a.port), "--server.maxUploadSize", "1024"]
     if a.headless:
         cmd += ["--server.headless", "true"]
     return subprocess.call(cmd)
