@@ -1,5 +1,6 @@
 """جدولة المركبات (Vehicle Blocking): أقل عدد مركبات يغطي كل رحلات الجدول، مع التوصيلات الفارغة والاستراحات،
 ثم قطع العمل للسائقين (Duties) وفق حدود القيادة المتواصلة."""
+
 import numpy as np
 import pandas as pd
 from scipy.optimize import linear_sum_assignment
@@ -15,6 +16,7 @@ BIG = 1e9
 def trip_endpoints(feed, proj, weekday=None):
     """جدول الرحلات مع أول/آخر محطة وإحداثياتها: trip_id, route_id, start, end, from_x/y, to_x/y, km."""
     from transport_hub.transit.service import trip_table
+
     t = trip_table(feed, weekday)[["trip_id", "route_id", "direction_id", "start", "end"]]
     st = feed.stop_times.merge(feed.stops[["stop_id", "stop_lat", "stop_lon"]], on="stop_id")
     st["x"], st["y"] = proj.xy(st["stop_lon"], st["stop_lat"])
@@ -32,7 +34,6 @@ def trip_endpoints(feed, proj, weekday=None):
 
 def _compat(trips, layover_s, max_gap_s, max_deadhead_km):
     """مصفوفة التوافق: الرحلة j تلي i لو وصلنا النهاية + استراحة + وقت التوصيل الفارغ قبل بدء j، وبدون انتظار أطول من max_gap."""
-    n = len(trips)
     end, start = trips["end"].to_numpy(), trips["start"].to_numpy()
     tx, ty = trips["to_x"].to_numpy(), trips["to_y"].to_numpy()
     fx, fy = trips["from_x"].to_numpy(), trips["from_y"].to_numpy()
@@ -60,7 +61,7 @@ def build_blocks(trips, layover_min=5, max_gap_min=90, minimize_cost=True, depot
                 nxt[i] = j
     else:
         m = maximum_bipartite_matching(csr_matrix(ok.astype(np.int8)), perm_type="column")
-        nxt = np.where(m >= 0, m, -1)       # m[i] = العمود المقابل للصف i
+        nxt = np.where(m >= 0, m, -1)  # m[i] = العمود المقابل للصف i
     has_prev = np.zeros(n, bool)
     has_prev[nxt[nxt >= 0]] = True
     veh = np.full(n, -1)
@@ -82,7 +83,7 @@ def block_stats(blocks, trips, depot_xy=None):
     """إحصاءات: المركبات، ساعات الخدمة والاستراحة، التوصيل الفارغ، الإشغال، والحد الأدنى النظري (أقصى تزامن للرحلات)."""
     ev = np.concatenate([np.ones(len(trips)), -np.ones(len(trips))])
     t = np.concatenate([trips["start"].to_numpy(), trips["end"].to_numpy()])
-    peak = int(np.max(np.cumsum(ev[np.lexsort((ev, t))])))        # النهايات قبل البدايات عند التساوي
+    peak = int(np.max(np.cumsum(ev[np.lexsort((ev, t))])))  # النهايات قبل البدايات عند التساوي
     service_h = float((blocks["end"] - blocks["start"]).sum() / 3600)
     dead_km, idle_h = 0.0, 0.0
     pull_km = 0.0
@@ -93,18 +94,39 @@ def block_stats(blocks, trips, depot_xy=None):
             dead_km += d.sum() / 1000
             idle_h += float((b["start"].to_numpy() - a["end"].to_numpy() - d / (DEADHEAD_KMH / 3.6)).sum() / 3600)
         if depot_xy is not None:
-            f, l = g.iloc[0], g.iloc[-1]
-            pull_km += (np.hypot(f["from_x"] - depot_xy[0], f["from_y"] - depot_xy[1]) + np.hypot(l["to_x"] - depot_xy[0], l["to_y"] - depot_xy[1])) * geo.DETOUR / 1000
+            first, last = g.iloc[0], g.iloc[-1]
+            pull_km += (
+                (
+                    np.hypot(first["from_x"] - depot_xy[0], first["from_y"] - depot_xy[1])
+                    + np.hypot(last["to_x"] - depot_xy[0], last["to_y"] - depot_xy[1])
+                )
+                * geo.DETOUR
+                / 1000
+            )
     veh = blocks["vehicle"].nunique()
     span_h = float(sum((g["end"].max() - g["start"].min()) for _, g in blocks.groupby("vehicle")) / 3600)
-    return dict(trips=len(trips), vehicles=int(veh), theoretical_min=peak, in_service_h=round(service_h, 1), idle_h=round(idle_h, 1),
-                deadhead_km=round(dead_km, 1), pull_in_out_km=round(pull_km, 1), service_km=round(float(trips["km"].sum()), 1),
-                utilization=round(service_h / span_h, 3) if span_h else 0.0)
+    return dict(
+        trips=len(trips),
+        vehicles=int(veh),
+        theoretical_min=peak,
+        in_service_h=round(service_h, 1),
+        idle_h=round(idle_h, 1),
+        deadhead_km=round(dead_km, 1),
+        pull_in_out_km=round(pull_km, 1),
+        service_km=round(float(trips["km"].sum()), 1),
+        utilization=round(service_h / span_h, 3) if span_h else 0.0,
+    )
 
 
 def vehicle_table(blocks):
     g = blocks.groupby("vehicle")
-    out = g.agg(trips=("trip_id", "size"), first_start=("start", "min"), last_end=("end", "max"), km=("km", "sum"), routes=("route_id", lambda s: "، ".join(sorted(set(s)))))
+    out = g.agg(
+        trips=("trip_id", "size"),
+        first_start=("start", "min"),
+        last_end=("end", "max"),
+        km=("km", "sum"),
+        routes=("route_id", lambda s: "، ".join(sorted(set(s)))),
+    )
     out["span_h"] = (out["last_end"] - out["first_start"]) / 3600
     out["in_service_h"] = g.apply(lambda d: (d["end"] - d["start"]).sum() / 3600, include_groups=False)
     for c in ("first_start", "last_end"):
@@ -136,19 +158,33 @@ def duties(blocks, max_drive_h=4.5, min_break_min=15, max_duty_h=9.0, signon_min
             elif last_relief is not None:
                 end_j, drv = last_relief
             else:
-                end_j, drv = j - 1, drive          # لا فرصة تبديل ضمن الحدود: نقطع قسراً ونعلّم المخالفة
+                end_j, drv = j - 1, drive  # لا فرصة تبديل ضمن الحدود: نقطع قسراً ونعلّم المخالفة
             dur = (t[end_j][2] - t[i][1]) / 3600
-            no_relief = end_j + 1 < n and (t[end_j + 1][1] - t[end_j][2]) / 60 < min_break_min      # تسليم بدون فجوة كافية
-            rows.append(dict(vehicle=v, start=t[i][1], end=t[end_j][2], drive_h=drv, trips=end_j - i + 1,
-                             violation=bool(drv > max_drive_h + 1e-9 or dur > max_duty_h + 1e-9 or no_relief)))
+            no_relief = end_j + 1 < n and (t[end_j + 1][1] - t[end_j][2]) / 60 < min_break_min  # تسليم بدون فجوة كافية
+            rows.append(
+                dict(
+                    vehicle=v,
+                    start=t[i][1],
+                    end=t[end_j][2],
+                    drive_h=drv,
+                    trips=end_j - i + 1,
+                    violation=bool(drv > max_drive_h + 1e-9 or dur > max_duty_h + 1e-9 or no_relief),
+                )
+            )
             i = end_j + 1
     d = pd.DataFrame(rows)
     if d.empty:
         return d, {}
     d["span_h"] = (d["end"] - d["start"]) / 3600
     paid = float(d["span_h"].sum() + len(d) * 2 * signon_min / 60)
-    summary = dict(pieces=len(d), drive_h=round(float(d["drive_h"].sum()), 1), paid_h=round(paid, 1), violations=int(d["violation"].sum()),
-                   min_drivers=int(np.ceil(paid / (max_duty_h * 0.85))), max_piece_h=round(float(d["span_h"].max()), 1))
+    summary = dict(
+        pieces=len(d),
+        drive_h=round(float(d["drive_h"].sum()), 1),
+        paid_h=round(paid, 1),
+        violations=int(d["violation"].sum()),
+        min_drivers=int(np.ceil(paid / (max_duty_h * 0.85))),
+        max_piece_h=round(float(d["span_h"].max()), 1),
+    )
     for c in ("start", "end"):
         d[c] = d[c].map(lambda s_: f"{int(s_ // 3600):02d}:{int(s_ % 3600 // 60):02d}")
     return d, summary

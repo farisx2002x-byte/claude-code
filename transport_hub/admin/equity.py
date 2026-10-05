@@ -1,4 +1,5 @@
 """العدالة المكانية: توزيع الخدمة على الأحياء والفئات الأقل دخلاً، ومؤشر Gini، وترتيب الأولويات."""
+
 import numpy as np
 import pandas as pd
 
@@ -30,9 +31,16 @@ def by_district(cov):
     for d, g in cov.groupby("district"):
         p = g["pop"].sum()
         li = (g["pop"] * g["low_income"]).sum() / p if p else 0
-        rows.append(dict(الحي=d, السكان=int(p), تغطية_400=round(100 * g.loc[g["covered_400"], "pop"].sum() / p, 1) if p else 0,
-                         مؤشر_الخدمة=round(float(np.average(g["access_index"], weights=g["pop"])) if p else 0, 2),
-                         نسبة_محدودي_الدخل=round(li, 2), بلا_خدمة=int(g.loc[g["access_index"] == 0, "pop"].sum())))
+        rows.append(
+            dict(
+                الحي=d,
+                السكان=int(p),
+                تغطية_400=round(100 * g.loc[g["covered_400"], "pop"].sum() / p, 1) if p else 0,
+                مؤشر_الخدمة=round(float(np.average(g["access_index"], weights=g["pop"])) if p else 0, 2),
+                نسبة_محدودي_الدخل=round(li, 2),
+                بلا_خدمة=int(g.loc[g["access_index"] == 0, "pop"].sum()),
+            )
+        )
     return pd.DataFrame(rows).sort_values("مؤشر_الخدمة").reset_index(drop=True)
 
 

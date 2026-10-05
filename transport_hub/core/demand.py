@@ -1,4 +1,5 @@
 """نمذجة الطلب: توليد الرحلات وجذبها (نموذج الجاذبية) وتقدير الركاب على النقل العام."""
+
 import numpy as np
 import pandas as pd
 
@@ -26,13 +27,13 @@ def gravity(pop, poi, beta=0.25, trip_rate=2.5, top=40, max_zones=3000):
     P = pop["pop"].to_numpy(float) * trip_rate
     d = np.hypot(xy[:, None, 0] - xy[None, :, 0], xy[:, None, 1] - xy[None, :, 1]) * geo.DETOUR / 1000 + 0.3
     f = A[None, :] * np.exp(-beta * d)
-    np.fill_diagonal(f, f.diagonal() * 0.5)          # الرحلات داخل المنطقة أقل
+    np.fill_diagonal(f, f.diagonal() * 0.5)  # الرحلات داخل المنطقة أقل
     T = P[:, None] * f / f.sum(axis=1, keepdims=True).clip(1e-9)
     out = pop[["zone_id", "name", "district", "x", "y"]].copy()
     out["production"], out["attraction_score"] = P, A
     out["attracted_trips"] = T.sum(axis=0)
     out["avg_trip_km"] = (T * d).sum(axis=1) / T.sum(axis=1).clip(1e-9)
-    idx = np.dstack(np.unravel_index(np.argsort(-T, axis=None)[:top * 3], T.shape))[0]
+    idx = np.dstack(np.unravel_index(np.argsort(-T, axis=None)[: top * 3], T.shape))[0]
     rows = [dict(**{"from": pop["name"].iat[i], "to": pop["name"].iat[j]}, trips=float(T[i, j]), km=float(d[i, j])) for i, j in idx if i != j][:top]
     return out, pd.DataFrame(rows), T
 

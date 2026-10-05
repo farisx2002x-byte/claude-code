@@ -1,4 +1,5 @@
 """الوصول بالنقل العام بزمن حقيقي (Connection Scan): أقرب وصول من نقطة لكل المحطات، وعدد الفرص خلال T دقيقة."""
+
 import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
@@ -6,20 +7,32 @@ from scipy.spatial import cKDTree
 from transport_hub.core import geo
 
 INF = 1e18
-TRANSFER_WALK_M = 300     # مشي بين محطتين قريبتين للتبديل (مسافة فعلية)
+TRANSFER_WALK_M = 300  # مشي بين محطتين قريبتين للتبديل (مسافة فعلية)
 MIN_TRANSFER_S = 60
 
 
 class Router:
     def __init__(self, feed, proj, weekday=None):
         from transport_hub.transit.gtfs import active_trips
+
         tr = active_trips(feed, weekday)
         st = feed.stop_times[feed.stop_times["trip_id"].isin(tr["trip_id"])]
         st = st.sort_values(["trip_id", "stop_sequence"])
         nxt = st.groupby("trip_id").shift(-1)
         m = nxt["stop_id"].notna()
-        conn = pd.DataFrame({"trip": st.loc[m, "trip_id"].values, "from": st.loc[m, "stop_id"].values, "to": nxt.loc[m, "stop_id"].values,
-                             "dep": st.loc[m, "dep"].values, "arr": nxt.loc[m, "arr"].values}).sort_values("dep").reset_index(drop=True)
+        conn = (
+            pd.DataFrame(
+                {
+                    "trip": st.loc[m, "trip_id"].values,
+                    "from": st.loc[m, "stop_id"].values,
+                    "to": nxt.loc[m, "stop_id"].values,
+                    "dep": st.loc[m, "dep"].values,
+                    "arr": nxt.loc[m, "arr"].values,
+                }
+            )
+            .sort_values("dep")
+            .reset_index(drop=True)
+        )
         self.stops = feed.stops.dropna(subset=["stop_lat", "stop_lon"]).reset_index(drop=True)
         self.stops["x"], self.stops["y"] = proj.xy(self.stops["stop_lon"], self.stops["stop_lat"])
         self.sid = {s: i for i, s in enumerate(self.stops["stop_id"])}
@@ -105,7 +118,7 @@ def opportunities(router, origins, dest, t0_h=8.0, minutes=45, value_cols=("pop"
     out = origins.copy()
     for c in value_cols:
         out[f"reach_{c}_{minutes}"] = res[c]
-    if len(idx) < n:       # تقدير باقي النقاط من أقرب نقطة محسوبة
+    if len(idx) < n:  # تقدير باقي النقاط من أقرب نقطة محسوبة
         tree = cKDTree(origins[["x", "y"]].to_numpy()[idx])
         _, nn = tree.query(origins[["x", "y"]].to_numpy())
         for c in value_cols:

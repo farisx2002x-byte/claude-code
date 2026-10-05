@@ -1,9 +1,8 @@
 """تحليل متعدد المعايير لاختيار مكان أي منشأة: معايير بأوزان، تطبيع، قيود مسافة، وترتيب المواقع."""
+
 from dataclasses import dataclass
-from typing import Callable
 
 import numpy as np
-import pandas as pd
 from scipy.spatial import cKDTree
 
 from transport_hub.core import geo
@@ -12,9 +11,9 @@ from transport_hub.core import geo
 @dataclass
 class Criterion:
     name: str
-    values: np.ndarray       # قيمة لكل مرشح
+    values: np.ndarray  # قيمة لكل مرشح
     weight: float
-    benefit: bool = True     # True: الأكبر أفضل، False: الأصغر أفضل
+    benefit: bool = True  # True: الأكبر أفضل، False: الأصغر أفضل
     note: str = ""
 
 
@@ -29,7 +28,7 @@ def _norm(v, benefit):
 def pop_within(cand_xy, pop_df, radius, col="pop"):
     tree = cKDTree(pop_df[["x", "y"]].to_numpy())
     w = pop_df[col].to_numpy(float)
-    return np.array([w[l].sum() for l in tree.query_ball_point(cand_xy, radius)])
+    return np.array([w[lst].sum() for lst in tree.query_ball_point(cand_xy, radius)])
 
 
 def poi_within(cand_xy, poi_df, radius, categories=None):
@@ -38,7 +37,7 @@ def poi_within(cand_xy, poi_df, radius, categories=None):
         return np.zeros(len(cand_xy))
     tree = cKDTree(p[["x", "y"]].to_numpy())
     w = p["weight"].to_numpy(float)
-    return np.array([w[l].sum() for l in tree.query_ball_point(cand_xy, radius)])
+    return np.array([w[lst].sum() for lst in tree.query_ball_point(cand_xy, radius)])
 
 
 def dist_to(cand_xy, pts_xy):
@@ -48,7 +47,11 @@ def dist_to(cand_xy, pts_xy):
 
 def uncovered_pop(cand_xy, pop_df, existing_xy, radius, col="pop"):
     """السكان غير المغطين حالياً ضمن radius من المرشح (فجوة الخدمة)."""
-    d, _ = geo.nearest(pop_df[["x", "y"]].to_numpy(), np.asarray(existing_xy, float)) if existing_xy is not None and len(existing_xy) else (np.full(len(pop_df), np.inf), None)
+    d, _ = (
+        geo.nearest(pop_df[["x", "y"]].to_numpy(), np.asarray(existing_xy, float))
+        if existing_xy is not None and len(existing_xy)
+        else (np.full(len(pop_df), np.inf), None)
+    )
     unc = pop_df[d * geo.DETOUR > radius]
     return pop_within(cand_xy, unc, radius, col) if len(unc) else np.zeros(len(cand_xy))
 
@@ -83,18 +86,24 @@ def pick(scored, top=10, min_spacing_m=0.0, mask=None):
 
 # ───── قوالب أنواع المنشآت: أوزان وإعدادات ─────
 PRESETS = {
-    "محطة حافلات": dict(radius=400, spacing=350, weights=dict(pop=0.35, gap=0.30, poi=0.20, low_income=0.10, hub=0.05),
-                        desc="تغطية سكان غير مخدومين قرب نقاط الجذب."),
-    "موقف تاكسي": dict(radius=300, spacing=500, weights=dict(poi=0.40, pop=0.15, hub=0.30, trips=0.15),
-                       desc="قرب نقاط الجذب ومحاور النقل وكثافة الالتقاط التاريخية."),
-    "موقف انتظار وركوب (Park & Ride)": dict(radius=1500, spacing=2000, weights=dict(pop=0.25, hub=0.35, gap=0.10, poi=0.10, edge=0.20),
-                                           desc="عند أطراف المدينة قرب محور نقل رئيسي."),
-    "مستودع حافلات": dict(radius=3000, spacing=3000, weights=dict(pop=0.30, edge=0.35, hub=0.20, poi=0.15),
-                          desc="يقلل الرحلات الفارغة؛ يفضّل الأطراف القريبة من الخطوط."),
-    "محطة شحن كهربائي": dict(radius=500, spacing=800, weights=dict(poi=0.35, trips=0.30, hub=0.20, pop=0.15),
-                             desc="قرب مواقع الوقوف الطويل ومراكز النشاط."),
-    "مركز تجميع مدرسي": dict(radius=600, spacing=600, weights=dict(students=0.55, gap=0.25, hub=0.10, pop=0.10),
-                             desc="يخدم أكبر عدد طلاب بعيدين عن الباص."),
+    "محطة حافلات": dict(
+        radius=400, spacing=350, weights=dict(pop=0.35, gap=0.30, poi=0.20, low_income=0.10, hub=0.05), desc="تغطية سكان غير مخدومين قرب نقاط الجذب."
+    ),
+    "موقف تاكسي": dict(
+        radius=300, spacing=500, weights=dict(poi=0.40, pop=0.15, hub=0.30, trips=0.15), desc="قرب نقاط الجذب ومحاور النقل وكثافة الالتقاط التاريخية."
+    ),
+    "موقف انتظار وركوب (Park & Ride)": dict(
+        radius=1500, spacing=2000, weights=dict(pop=0.25, hub=0.35, gap=0.10, poi=0.10, edge=0.20), desc="عند أطراف المدينة قرب محور نقل رئيسي."
+    ),
+    "مستودع حافلات": dict(
+        radius=3000, spacing=3000, weights=dict(pop=0.30, edge=0.35, hub=0.20, poi=0.15), desc="يقلل الرحلات الفارغة؛ يفضّل الأطراف القريبة من الخطوط."
+    ),
+    "محطة شحن كهربائي": dict(
+        radius=500, spacing=800, weights=dict(poi=0.35, trips=0.30, hub=0.20, pop=0.15), desc="قرب مواقع الوقوف الطويل ومراكز النشاط."
+    ),
+    "مركز تجميع مدرسي": dict(
+        radius=600, spacing=600, weights=dict(students=0.55, gap=0.25, hub=0.10, pop=0.10), desc="يخدم أكبر عدد طلاب بعيدين عن الباص."
+    ),
 }
 
 
@@ -111,7 +120,11 @@ def evaluate_site_type(kind, cand, pop, poi, existing_xy=None, hubs_xy=None, tri
     if w.get("students"):
         crit.append(Criterion("students", pop_within(xy, pop, r, "students"), w["students"], True, f"الطلاب ضمن {r} م"))
     if w.get("low_income"):
-        crit.append(Criterion("low_income", pop_within(xy, pop.assign(li=pop["pop"] * pop["low_income"]), r, "li"), w["low_income"], True, "سكان ذوو دخل محدود"))
+        crit.append(
+            Criterion(
+                "low_income", pop_within(xy, pop.assign(li=pop["pop"] * pop["low_income"]), r, "li"), w["low_income"], True, "سكان ذوو دخل محدود"
+            )
+        )
     if w.get("poi") and poi is not None and len(poi):
         crit.append(Criterion("poi", poi_within(xy, poi, r), w["poi"], True, "نقاط الجذب الموزونة"))
     if w.get("gap"):
@@ -120,7 +133,9 @@ def evaluate_site_type(kind, cand, pop, poi, existing_xy=None, hubs_xy=None, tri
         crit.append(Criterion("hub", dist_to(xy, hubs_xy), w["hub"], False, "القرب من محور نقل"))
     if w.get("trips") and trips_xy is not None and len(trips_xy):
         tr = cKDTree(trips_xy)
-        crit.append(Criterion("trips", np.array([len(l) for l in tr.query_ball_point(xy, r)], float), w["trips"], True, "كثافة الرحلات التاريخية"))
+        crit.append(
+            Criterion("trips", np.array([len(lst) for lst in tr.query_ball_point(xy, r)], float), w["trips"], True, "كثافة الرحلات التاريخية")
+        )
     if w.get("edge"):
         cx, cy = pop["x"].mean(), pop["y"].mean()
         crit.append(Criterion("edge", np.hypot(xy[:, 0] - cx, xy[:, 1] - cy), w["edge"], True, "البعد عن مركز المدينة"))

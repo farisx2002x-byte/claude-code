@@ -1,4 +1,5 @@
 """صفحة النقل المدرسي: تضمّن وحدة bus_access_project كما هي (واجهتها الكاملة)."""
+
 import sys
 from pathlib import Path
 
@@ -15,4 +16,5 @@ def render():
         sys.path.insert(0, str(SCHOOL_ROOT))
     # أسماء الحزم (config, src, ui) خاصة بالوحدة المدرسية؛ منصة النقل تعيش تحت transport_hub فلا تتعارض
     from ui.page import render as school_render
+
     school_render()

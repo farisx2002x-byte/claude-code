@@ -1,4 +1,5 @@
 """طلب التاكسي: نمط الساعات، النقاط الساخنة، ومصفوفة الأصل-الوجهة."""
+
 import numpy as np
 import pandas as pd
 from scipy.ndimage import label
@@ -54,9 +55,16 @@ def hotspots(trips, cell=400, top_share=0.5, hours=None, proj=None, min_trips=1)
     for c, g2 in hot.groupby("cluster"):
         w = g2["trips"].values
         th = t[cl == c]
-        rows.append(dict(x=float(np.average(g2["x"], weights=w)), y=float(np.average(g2["y"], weights=w)), cells=len(g2),
-                         trips_per_day=float(w.sum() / n_days(trips)), share_pct=float(100 * w.sum() / len(t)),
-                         peak_hour=int(th["hour"].mode().iat[0]) if len(th) else -1))
+        rows.append(
+            dict(
+                x=float(np.average(g2["x"], weights=w)),
+                y=float(np.average(g2["y"], weights=w)),
+                cells=len(g2),
+                trips_per_day=float(w.sum() / n_days(trips)),
+                share_pct=float(100 * w.sum() / len(t)),
+                peak_hour=int(th["hour"].mode().iat[0]) if len(th) else -1,
+            )
+        )
     out = pd.DataFrame(rows).sort_values("trips_per_day", ascending=False).reset_index(drop=True)
     out.insert(0, "rank", np.arange(1, len(out) + 1))
     if proj is not None:

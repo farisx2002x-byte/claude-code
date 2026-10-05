@@ -1,7 +1,7 @@
 """صفحة النقل العام: نظرة عامة، التغطية، الوصول بالزمن، التخطيط، الأسطول والتشغيل."""
+
 import io
 
-import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -36,7 +36,11 @@ def _router(sig_):
 
 def render():
     U.style()
-    st.markdown("### النقل العام")
+    U.page_header(
+        "النقل العام",
+        "تغطية السكان، مستوى الخدمة، الوصول بالزمن، وتخطيط محطات وخطوط جديدة.",
+        "**مؤشر الخدمة** (على طريقة PTAL) يجمع المشي والتردد: 1 ضعيف جداً … 6 ممتاز.  \n**الوصول بالزمن**: ماذا أبلغ خلال X دقيقة شاملاً المشي والتبديل.  \n المسافات مستقيمة × 1.3 (تقدير).",
+    )
     d = U.require("population", "gtfs", what="")
     if d is None:
         return
@@ -48,15 +52,35 @@ def render():
     tabs = st.tabs(["نظرة عامة", "التغطية", "الوصول بالزمن", "التخطيط", "الأسطول والتشغيل"])
 
     with tabs[0]:
-        U.kpis([(len(feed.routes), "خطوط"), (len(feed.stops), "محطات"), (int(rm["trips_per_day"].sum()), "رحلات/يوم"),
-                (f'{k["covered_400_pct"]:.0f}%', "تغطية 400 م", "ok" if k["covered_400_pct"] >= 60 else "hard"),
-                (f'{k["covered_800_pct"]:.0f}%', "تغطية 800 م", "ok" if k["covered_800_pct"] >= 85 else "mid"),
-                (f'{k["avg_access_index"]:.1f}', "متوسط مؤشر الخدمة")])
+        U.kpis(
+            [
+                (len(feed.routes), "خطوط"),
+                (len(feed.stops), "محطات"),
+                (int(rm["trips_per_day"].sum()), "رحلات/يوم"),
+                (f"{k['covered_400_pct']:.0f}%", "تغطية 400 م", "ok" if k["covered_400_pct"] >= 60 else "hard"),
+                (f"{k['covered_800_pct']:.0f}%", "تغطية 800 م", "ok" if k["covered_800_pct"] >= 85 else "mid"),
+                (f"{k['avg_access_index']:.1f}", "متوسط مؤشر الخدمة"),
+            ]
+        )
         st.markdown("**مقاييس الخطوط**")
-        U.table(rm.rename(columns={"route_id": "الخط", "name": "الاسم", "stops": "محطات", "length_km": "الطول كم", "avg_stop_spacing_m": "تباعد المحطات م",
-                                   "run_time_min": "زمن الرحلة د", "commercial_speed_kmh": "السرعة التجارية", "trips_per_day": "رحلات/يوم",
-                                   "peak_headway_min": "تردد الذروة د", "peak_fleet": "أسطول الذروة", "service_span": "ساعات الخدمة"}))
-        pv = hw.pivot_table(index="route_id", columns="period", values="headway_min", aggfunc="mean").round(1)
+        U.table(
+            rm.rename(
+                columns={
+                    "route_id": "الخط",
+                    "name": "الاسم",
+                    "stops": "محطات",
+                    "length_km": "الطول كم",
+                    "avg_stop_spacing_m": "تباعد المحطات م",
+                    "run_time_min": "زمن الرحلة د",
+                    "commercial_speed_kmh": "السرعة التجارية",
+                    "trips_per_day": "رحلات/يوم",
+                    "peak_headway_min": "تردد الذروة د",
+                    "peak_fleet": "أسطول الذروة",
+                    "service_span": "ساعات الخدمة",
+                }
+            )
+        )
+        pv = hw.pivot_table(index="route_id", columns="period", values="headway_min", aggfunc="mean").round(1).rename_axis(index="الخط", columns=None)
         st.markdown("**التردد (دقيقة) حسب الفترة**")
         st.dataframe(pv, width="stretch")
         st.markdown("**محاور التبديل**")
@@ -71,9 +95,14 @@ def render():
         cv = cov.copy()
         cv["lon"], cv["lat"] = proj.lonlat(cv["x"], cv["y"])
         if mode.startswith("مؤشر"):
-            col = lambda r: U.GRADE_COL[str(r.grade)[0]]
+
+            def col(r):
+                return U.GRADE_COL[str(r.grade)[0]]
         else:
-            col = lambda r: [46, 158, 79] if r.covered_400 else [209, 56, 61]
+
+            def col(r):
+                return [46, 158, 79] if r.covered_400 else [209, 56, 61]
+
         layers = [U.scatter(cv, col, size_col=230, opacity=0.65)]
         if show_stops:
             s2 = stops.rename(columns={"stop_lon": "lon", "stop_lat": "lat"})
@@ -93,14 +122,23 @@ def render():
         arr = r.earliest_arrival(o["x"], o["y"], hour * 3600, horizon_s=mins * 60 + 600)
         ok = r.reachable_points(arr, pop[["x", "y"]].to_numpy(), hour * 3600, mins)
         poi = U.get("poi")
-        items = [(f'{int(pop.loc[ok, "pop"].sum()):,}', "سكان يمكن بلوغهم"), (f'{100 * ok.mean():.0f}%', "من المناطق"), (f'{int(pop.loc[ok, "jobs"].sum()):,}', "وظائف")]
+        items = [
+            (f"{int(pop.loc[ok, 'pop'].sum()):,}", "سكان يمكن بلوغهم"),
+            (f"{100 * ok.mean():.0f}%", "من المناطق"),
+            (f"{int(pop.loc[ok, 'jobs'].sum()):,}", "وظائف"),
+        ]
         if poi is not None:
             pok = r.reachable_points(arr, poi[["x", "y"]].to_numpy(), hour * 3600, mins)
-            items.append((f'{int(pok.sum())} / {len(poi)}', "نقاط جذب"))
+            items.append((f"{int(pok.sum())} / {len(poi)}", "نقاط جذب"))
         U.kpis(items)
-        z = pop.copy(); z["ok"] = ok
-        U.deck([U.scatter(z, lambda r_: [21, 101, 192] if r_.ok else [190, 190, 190], size_col=230, opacity=0.6),
-                U.scatter(pop[pop["name"] == zone], [220, 30, 30], size_col=350)])
+        z = pop.copy()
+        z["ok"] = ok
+        U.deck(
+            [
+                U.scatter(z, lambda r_: [21, 101, 192] if r_.ok else [190, 190, 190], size_col=230, opacity=0.6),
+                U.scatter(pop[pop["name"] == zone], [220, 30, 30], size_col=350),
+            ]
+        )
 
     with tabs[3]:
         poi = U.get("poi")
@@ -115,9 +153,13 @@ def render():
             pw = c[2].slider("وزن قرب نقاط الجذب", 0.0, 1.0, 0.2, 0.05, key="hub_t_pw")
             sel, (b, a) = planning.suggest_stops(pop, ex, cand, rad, int(kk), poi, pw, proj)
             U.kpis([(f"{b:.1f}% → {a:.1f}%", f"التغطية عند {rad} م"), (int(sel["gain"].sum()), "سكان جدد")])
-            U.deck([U.scatter(pop.assign(lon=pop["lon"], lat=pop["lat"]), [160, 160, 160], size_col=200, opacity=0.4),
+            U.deck(
+                [
+                    U.scatter(pop.assign(lon=pop["lon"], lat=pop["lat"]), [160, 160, 160], size_col=200, opacity=0.4),
                     U.scatter(stops.rename(columns={"stop_lon": "lon", "stop_lat": "lat"}), [20, 20, 20], size_col=45),
-                    U.scatter(sel, [230, 120, 0], size_col=120)])
+                    U.scatter(sel, [230, 120, 0], size_col=120),
+                ]
+            )
             U.table(sel[["rank", "gain", "cum_covered_pct", "lon", "lat"]].round(3))
             U.download_df("تنزيل المواقع (CSV)", sel, "new_stops.csv", "hub_t_dl_stops")
         elif sub == "اقتراح خط جديد":
@@ -130,17 +172,37 @@ def render():
             if line.empty:
                 U.empty("ما فيه مناطق غير مخدومة تستحق خطاً جديداً.")
             else:
-                U.kpis([(info["length_km"], "الطول كم"), (info["run_time_min"], "زمن الرحلة د"), (info["fleet"], "الأسطول المطلوب"),
-                        (f'{info["pop_covered_new"]:,}', "سكان جدد"), (f'{info["coverage_before"]}% → {info["coverage_after"]}%', "التغطية")])
+                U.kpis(
+                    [
+                        (info["length_km"], "الطول كم"),
+                        (info["run_time_min"], "زمن الرحلة د"),
+                        (info["fleet"], "الأسطول المطلوب"),
+                        (f"{info['pop_covered_new']:,}", "سكان جدد"),
+                        (f"{info['coverage_before']}% → {info['coverage_after']}%", "التغطية"),
+                    ]
+                )
                 import pydeck as pdk
-                path = pdk.Layer("PathLayer", [{"path": line[["lon", "lat"]].values.tolist()}], get_path="path", width_min_pixels=4, get_color=[230, 120, 0])
-                U.deck([U.scatter(stops.rename(columns={"stop_lon": "lon", "stop_lat": "lat"}), [20, 20, 20], size_col=45), path, U.scatter(line, [230, 120, 0], size_col=110)])
-                tb = timetable.build_line("NEW1", "خط مقترح", [(f"م{r_.order}", r_.lon, r_.lat) for r_ in line.itertuples()], speed_kmh=spd, periods=[(6, 22, hwy)])
+
+                path = pdk.Layer(
+                    "PathLayer", [{"path": line[["lon", "lat"]].values.tolist()}], get_path="path", width_min_pixels=4, get_color=[230, 120, 0]
+                )
+                U.deck(
+                    [
+                        U.scatter(stops.rename(columns={"stop_lon": "lon", "stop_lat": "lat"}), [20, 20, 20], size_col=45),
+                        path,
+                        U.scatter(line, [230, 120, 0], size_col=110),
+                    ]
+                )
+                tb = timetable.build_line(
+                    "NEW1", "خط مقترح", [(f"م{r_.order}", r_.lon, r_.lat) for r_ in line.itertuples()], speed_kmh=spd, periods=[(6, 22, hwy)]
+                )
                 merged = timetable.merge_tables(U.get("gtfs"), tb)
-                buf = io.BytesIO(); G.write_zip(merged, buf)
+                buf = io.BytesIO()
+                G.write_zip(merged, buf)
                 st.download_button("تنزيل GTFS بعد إضافة الخط (zip)", buf.getvalue(), file_name="gtfs_with_new_line.zip", key="hub_t_dl_gtfs")
                 if st.button("احفظ كسيناريو", key="hub_t_save_sc"):
                     from transport_hub.admin.scenarios import ScenarioBook
+
                     add = [dict(x=r_.x, y=r_.y, route_id="NEW1", headway_min=hwy) for r_ in line.itertuples()]
                     kk2, _ = planning.scenario_kpis(pop, stops, sr, add_stops=add)
                     ScenarioBook(U.ws()).save(f"خط جديد ({n} محطة، {hwy} د)", dict(info), kk2)
@@ -154,6 +216,7 @@ def render():
             U.table(pd.DataFrame({"المؤشر": list(base), "الأساس": [float(v) for v in base.values()], "السيناريو": [float(v) for v in k2.values()]}))
             if st.button("احفظ كسيناريو", key="hub_t_save_hw"):
                 from transport_hub.admin.scenarios import ScenarioBook
+
                 ScenarioBook(U.ws()).save(f"تردد ×{f} على {len(sel_r)} خط", dict(factor=f, routes=sel_r), k2)
                 st.success("حُفظ")
 
@@ -161,9 +224,21 @@ def render():
         z, by_stop, by_route = ridership.estimate(cov, stops, sr)
         prod = ridership.productivity(by_route, rm)
         st.caption("الركاب تقدير أولي من نموذج حصة النقل العام (يحتاج معايرة بعدّادات الركاب أو مسح).")
-        U.table(prod[["route_id", "name", "pax_day", "pax_per_km", "pax_per_vehicle_hour", "load_ratio", "peak_fleet"]].round(1).rename(columns={
-            "route_id": "الخط", "name": "الاسم", "pax_day": "ركاب/يوم", "pax_per_km": "ركاب/كم", "pax_per_vehicle_hour": "ركاب/ساعة مركبة",
-            "load_ratio": "نسبة التحميل", "peak_fleet": "أسطول الذروة"}))
+        U.table(
+            prod[["route_id", "name", "pax_day", "pax_per_km", "pax_per_vehicle_hour", "load_ratio", "peak_fleet"]]
+            .round(1)
+            .rename(
+                columns={
+                    "route_id": "الخط",
+                    "name": "الاسم",
+                    "pax_day": "ركاب/يوم",
+                    "pax_per_km": "ركاب/كم",
+                    "pax_per_vehicle_hour": "ركاب/ساعة مركبة",
+                    "load_ratio": "نسبة التحميل",
+                    "peak_fleet": "أسطول الذروة",
+                }
+            )
+        )
         over = prod[prod["load_ratio"] > 1]
         if len(over):
             st.warning("خطوط الطلب المقدّر فيها يفوق السعة: " + "، ".join(over["route_id"]) + " (فكّر بزيادة التردد أو مركبات أكبر).")
@@ -173,6 +248,13 @@ def render():
             km_day = r_.length_km * r_.trips_per_day
             hrs = r_.run_time_min * r_.trips_per_day / 60
             c = finance.annual_cost(vt, int(r_.peak_fleet or 0), km_day, hrs)
-            rows.append(dict(الخط=r_.route_id, الأسطول=int(r_.peak_fleet or 0), التكلفة_السنوية=round(c["total"]), تكلفة_الراكب=round(finance.cost_per_passenger(c["total"], r_.pax_day), 2) if r_.pax_day else None,
-                             انبعاثات_طن=round(c["co2_t"], 1)))
+            rows.append(
+                dict(
+                    الخط=r_.route_id,
+                    الأسطول=int(r_.peak_fleet or 0),
+                    التكلفة_السنوية=round(c["total"]),
+                    تكلفة_الراكب=round(finance.cost_per_passenger(c["total"], r_.pax_day), 2) if r_.pax_day else None,
+                    انبعاثات_طن=round(c["co2_t"], 1),
+                )
+            )
         U.table(pd.DataFrame(rows))

@@ -1,5 +1,6 @@
 """إدارة الأسطول: سجل المركبات، الصيانة الدورية، العمر، والتحول للكهرباء (احتياج الطاقة وجدوى الشحن والتكلفة)."""
-from datetime import date, timedelta
+
+from datetime import date
 
 import numpy as np
 import pandas as pd
@@ -29,7 +30,9 @@ def maintenance(reg, km_per_day, today=None, service_km=SERVICE_KM, service_days
     d["days_since"] = (today - d["last_service_date"]).dt.days
     d["km_left"] = service_km - d["km_since"]
     d["days_left"] = service_days - d["days_since"]
-    d["status"] = np.where((d["km_left"] < 0) | (d["days_left"] < 0), "متأخرة", np.where((d["km_left"] < soon_km) | (d["days_left"] < soon_days), "قريبة", "سليمة"))
+    d["status"] = np.where(
+        (d["km_left"] < 0) | (d["days_left"] < 0), "متأخرة", np.where((d["km_left"] < soon_km) | (d["days_left"] < soon_days), "قريبة", "سليمة")
+    )
     eta_days = np.minimum(d["km_left"].clip(lower=0) / np.maximum(rate, 1), d["days_left"].clip(lower=0))
     d["next_service"] = (today + pd.to_timedelta(eta_days, "D")).dt.date
     d["age"] = today.year - d["year"]
@@ -39,7 +42,13 @@ def maintenance(reg, km_per_day, today=None, service_km=SERVICE_KM, service_days
 def age_profile(reg, today=None):
     y = pd.Timestamp(today or date.today()).year
     age = y - reg["year"]
-    return pd.cut(age, [-1, 2, 5, 8, 12, 100], labels=["0-2", "3-5", "6-8", "9-12", "13+"]).value_counts().sort_index().rename_axis("العمر").reset_index(name="العدد")
+    return (
+        pd.cut(age, [-1, 2, 5, 8, 12, 100], labels=["0-2", "3-5", "6-8", "9-12", "13+"])
+        .value_counts()
+        .sort_index()
+        .rename_axis("العمر")
+        .reset_index(name="العدد")
+    )
 
 
 def ev_feasibility(blocks, kwh_per_km=1.6, battery_kwh=350, usable=0.8, reserve=0.1, charge_kw=150, window_h=6.0, dead_km=None):
@@ -53,15 +62,34 @@ def ev_feasibility(blocks, kwh_per_km=1.6, battery_kwh=350, usable=0.8, reserve=
     v["needs_midday_charge_kwh"] = (v["kwh_day"] - usable_kwh).clip(lower=0)
     v["charge_h"] = v["kwh_day"] / charge_kw
     chargers = int(np.ceil(v["charge_h"].sum() / window_h))
-    summary = dict(vehicles=len(v), feasible=int(v["feasible"].sum()), feasible_pct=round(100 * float(v["feasible"].mean()), 1),
-                   energy_mwh_day=round(float(v["kwh_day"].sum()) / 1000, 1), chargers_needed=chargers,
-                   depot_peak_kw=round(chargers * charge_kw), usable_kwh=round(usable_kwh))
+    summary = dict(
+        vehicles=len(v),
+        feasible=int(v["feasible"].sum()),
+        feasible_pct=round(100 * float(v["feasible"].mean()), 1),
+        energy_mwh_day=round(float(v["kwh_day"].sum()) / 1000, 1),
+        chargers_needed=chargers,
+        depot_peak_kw=round(chargers * charge_kw),
+        usable_kwh=round(usable_kwh),
+    )
     return v, summary
 
 
-def tco(km_year, years, diesel=dict(price=650_000, l_100=30, fuel_price=1.66, maint_km=0.9),
-        ev=dict(price=1_450_000, kwh_km=1.6, kwh_price=0.18, maint_km=0.45, charger=120_000), co2_diesel_kg_l=2.68, co2_grid_kg_kwh=0.55, discount=0.05):
+DIESEL_DEFAULT = dict(price=650_000, l_100=30, fuel_price=1.66, maint_km=0.9)
+EV_DEFAULT = dict(price=1_450_000, kwh_km=1.6, kwh_price=0.18, maint_km=0.45, charger=120_000)
+
+
+def tco(
+    km_year,
+    years,
+    diesel=None,
+    ev=None,
+    co2_diesel_kg_l=2.68,
+    co2_grid_kg_kwh=0.55,
+    discount=0.05,
+):
     """مقارنة التكلفة الإجمالية (TCO) لمركبة واحدة بين الديزل والكهرباء على مدى years، مع القيمة الحالية والانبعاثات. قيم تقديرية."""
+    diesel = {**DIESEL_DEFAULT, **(diesel or {})}
+    ev = {**EV_DEFAULT, **(ev or {})}
     f = sum(1 / (1 + discount) ** t for t in range(1, years + 1))
     d_op = km_year * (diesel["l_100"] / 100 * diesel["fuel_price"] + diesel["maint_km"])
     e_op = km_year * (ev["kwh_km"] * ev["kwh_price"] + ev["maint_km"])

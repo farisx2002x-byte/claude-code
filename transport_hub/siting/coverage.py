@@ -1,4 +1,5 @@
 """اختيار المواقع: أقصى تغطية (Maximal Covering) وp-median للمستودعات والمراكز."""
+
 import heapq
 
 import numpy as np
@@ -22,15 +23,15 @@ def max_coverage(demand_xy, weights, cand_xy, radius, p, existing_xy=None, bonus
         for lst in cKDTree(dxy).query_ball_point(np.asarray(existing_xy, float), radius):
             covered[lst] = True
     before = w[covered].sum() / max(w.sum(), 1e-9)
-    lists = [np.asarray(l, int) for l in _cover_lists(dxy, np.asarray(cand_xy, float), radius)]
+    lists = [np.asarray(lst, int) for lst in _cover_lists(dxy, np.asarray(cand_xy, float), radius)]
     bonus = np.zeros(len(lists)) if bonus is None else np.asarray(bonus, float)
-    heap = [(-(w[l][~covered[l]].sum() + bonus[i]), i) for i, l in enumerate(lists)]
+    heap = [(-(w[lst][~covered[lst]].sum() + bonus[i]), i) for i, lst in enumerate(lists)]
     heapq.heapify(heap)
     rows, cum = [], w[covered].sum()
     total = max(w.sum(), 1e-9)
     while heap and len(rows) < p:
         neg, i = heapq.heappop(heap)
-        gain = w[lists[i]][~covered[lists[i]]].sum() + bonus[i]       # إعادة التقييم (كسول)
+        gain = w[lists[i]][~covered[lists[i]]].sum() + bonus[i]  # إعادة التقييم (كسول)
         if heap and gain < -heap[0][0] - 1e-12:
             heapq.heappush(heap, (-gain, i))
             continue
@@ -39,14 +40,14 @@ def max_coverage(demand_xy, weights, cand_xy, radius, p, existing_xy=None, bonus
         newly = w[lists[i]][~covered[lists[i]]].sum()
         covered[lists[i]] = True
         cum += newly
-        rows.append(dict(rank=len(rows) + 1, cand=i, x=cand_xy[i][0], y=cand_xy[i][1], gain=newly, bonus=bonus[i],
-                         cum_covered_pct=100 * cum / total))
+        rows.append(dict(rank=len(rows) + 1, cand=i, x=cand_xy[i][0], y=cand_xy[i][1], gain=newly, bonus=bonus[i], cum_covered_pct=100 * cum / total))
     return pd.DataFrame(rows), (100 * before, 100 * cum / total)
 
 
 def max_coverage_exact(demand_xy, weights, cand_xy, radius, p, existing_xy=None, time_s=20):
     """حل دقيق بـ CP-SAT للأحجام الصغيرة (للمقارنة مع الجشع). يرجع فهارس المرشحين المختارين."""
     from ortools.sat.python import cp_model
+
     w = np.rint(np.asarray(weights, float)).astype(int)
     dxy = np.asarray(demand_xy, float)
     pre = np.zeros(len(w), bool)
@@ -55,8 +56,8 @@ def max_coverage_exact(demand_xy, weights, cand_xy, radius, p, existing_xy=None,
             pre[lst] = True
     lists = _cover_lists(dxy, np.asarray(cand_xy, float), radius)
     cover_by = [[] for _ in range(len(w))]
-    for c, l in enumerate(lists):
-        for d in l:
+    for c, lst in enumerate(lists):
+        for d in lst:
             cover_by[d].append(c)
     m = cp_model.CpModel()
     y = [m.NewBoolVar(f"y{c}") for c in range(len(lists))]
@@ -80,6 +81,7 @@ def max_coverage_exact(demand_xy, weights, cand_xy, radius, p, existing_xy=None,
 def p_median(demand_xy, weights, cand_xy, p, max_iter=20):
     """p-median (مستودعات/مراكز): يقلل مجموع المسافات الموزونة. بداية جشعة ثم تبديل Teitz–Bart."""
     from scipy.spatial.distance import cdist
+
     w = np.asarray(weights, float)
     D = cdist(np.asarray(demand_xy, float), np.asarray(cand_xy, float))
     n_c = D.shape[1]
@@ -107,6 +109,12 @@ def p_median(demand_xy, weights, cand_xy, p, max_iter=20):
             break
     assign = D[:, chosen].argmin(axis=1)
     cost = float((w * D[np.arange(len(w)), np.array(chosen)[assign]]).sum())
-    sites = pd.DataFrame({"cand": chosen, "x": np.asarray(cand_xy)[chosen, 0], "y": np.asarray(cand_xy)[chosen, 1],
-                          "load": [float(w[assign == k].sum()) for k in range(len(chosen))]})
+    sites = pd.DataFrame(
+        {
+            "cand": chosen,
+            "x": np.asarray(cand_xy)[chosen, 0],
+            "y": np.asarray(cand_xy)[chosen, 1],
+            "load": [float(w[assign == k].sum()) for k in range(len(chosen))],
+        }
+    )
     return sites, assign, cost

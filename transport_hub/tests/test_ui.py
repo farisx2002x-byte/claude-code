@@ -1,4 +1,5 @@
 """اختبار واجهة كل صفحة بـ AppTest على المدينة التجريبية: لا أخطاء، وتظهر العناصر المتوقعة."""
+
 import pytest
 from streamlit.testing.v1 import AppTest
 
@@ -9,6 +10,7 @@ PAGES = ["p_home", "p_data", "p_transit", "p_taxi", "p_siting", "p_attractors", 
 @pytest.fixture(scope="module")
 def ws_env(tmp_path_factory):
     import os
+
     d = tmp_path_factory.mktemp("ws")
     os.environ["TRANSPORT_HUB_WORKSPACE"] = str(d)
     yield d
@@ -65,3 +67,23 @@ def test_ops_pages_with_demo_data(ws_env, page):
     at = AppTest.from_string(script(page), default_timeout=300).run()
     assert not at.exception, (page, [e.value for e in at.exception])
     assert len(at.markdown) > 0
+
+
+def test_outputs_page_builds_package(ws_env):
+    at = AppTest.from_string(script("p_outputs"), default_timeout=300).run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert len(at.markdown) > 0
+
+
+def test_guard_shows_friendly_error():
+    code = f"""
+import sys; sys.path.insert(0, {ROOT!r})
+from transport_hub.ui import common as U
+@U.guard
+def bad():
+    raise RuntimeError("boom")
+bad()
+"""
+    at = AppTest.from_string(code, default_timeout=60).run()
+    assert not at.exception
+    assert any("حدث خطأ غير متوقع" in m.value for m in at.markdown)

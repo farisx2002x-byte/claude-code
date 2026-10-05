@@ -1,4 +1,5 @@
 """قراءة GTFS (zip) وفحصه وكتابته. الحد الأدنى: stops, routes, trips, stop_times (+calendar اختياري)."""
+
 import io
 import zipfile
 from dataclasses import dataclass, field

@@ -1,6 +1,5 @@
 """صفحة اختيار المواقع: لأي منشأة (محطة، موقف، مستودع، شحن، مركز تجميع...) بثلاث طرق: معايير متعددة، أقصى تغطية، p-median."""
-import numpy as np
-import pandas as pd
+
 import streamlit as st
 
 from transport_hub.core import geo
@@ -12,7 +11,11 @@ from transport_hub.ui import common as U
 
 def render():
     U.style()
-    st.markdown("### اختيار المواقع")
+    U.page_header(
+        "اختيار المواقع",
+        "أفضل أماكن المحطات والمواقف والمستودعات ومراكز الشحن، بثلاث طرق.",
+        "**معايير متعددة**: أوزان قابلة للتعديل لكل معيار.  \n**أقصى تغطية**: يعظّم السكان المخدومين ضمن نصف القطر.  \n**p-median**: يقلل المسافة للأقرب (مراكز/مستودعات).",
+    )
     d = U.require("population")
     if d is None:
         return
@@ -22,6 +25,7 @@ def render():
     hubs_xy = None
     if feed:
         from transport_hub.transit import service
+
         h = service.hubs(feed, proj)
         hubs_xy = h[["x", "y"]].to_numpy() if len(h) else stops_df[["x", "y"]].to_numpy()
     trips = U.get("trips")
@@ -47,7 +51,16 @@ def render():
     if method.startswith("معايير"):
         w = {}
         cols = st.columns(len(cfg["weights"]))
-        labels = {"pop": "السكان", "gap": "فجوة الخدمة", "poi": "نقاط الجذب", "low_income": "محدودو الدخل", "hub": "القرب من محور", "trips": "كثافة الرحلات", "edge": "الأطراف", "students": "الطلاب"}
+        labels = {
+            "pop": "السكان",
+            "gap": "فجوة الخدمة",
+            "poi": "نقاط الجذب",
+            "low_income": "محدودو الدخل",
+            "hub": "القرب من محور",
+            "trips": "كثافة الرحلات",
+            "edge": "الأطراف",
+            "students": "الطلاب",
+        }
         for col, (k_, v) in zip(cols, cfg["weights"].items()):
             w[k_] = col.slider(labels.get(k_, k_), 0.0, 1.0, float(v), 0.05, key=f"hub_s_w_{k_}")
         scored, crit = mcda.evaluate_site_type(kind, cand, pop, poi, existing, hubs_xy, trips_xy, w, radius)
@@ -56,10 +69,21 @@ def render():
             mask = geo.nearest(cand[["x", "y"]].to_numpy(), existing)[0] >= spacing
         sel = mcda.pick(scored, int(n), spacing, mask)
         sel["lon"], sel["lat"] = proj.lonlat(sel["x"], sel["y"])
-        sc = scored.copy(); sc["lon"], sc["lat"] = proj.lonlat(sc["x"], sc["y"])
-        U.kpis([(f'{sel["score"].max():.0f}', "أعلى درجة"), (f'{sel["score"].mean():.0f}', "متوسط المختار"), (len(crit), "معايير")])
-        U.deck([U.scatter(sc, lambda r: [int(255 * (1 - r.score / 100)), int(60 + 190 * r.score / 100), 80], size_col=cell * 0.45, opacity=0.35, pickable=False),
-                U.scatter(sel, [230, 120, 0], size_col=cell * 0.7)])
+        sc = scored.copy()
+        sc["lon"], sc["lat"] = proj.lonlat(sc["x"], sc["y"])
+        U.kpis([(f"{sel['score'].max():.0f}", "أعلى درجة"), (f"{sel['score'].mean():.0f}", "متوسط المختار"), (len(crit), "معايير")])
+        U.deck(
+            [
+                U.scatter(
+                    sc,
+                    lambda r: [int(255 * (1 - r.score / 100)), int(60 + 190 * r.score / 100), 80],
+                    size_col=cell * 0.45,
+                    opacity=0.35,
+                    pickable=False,
+                ),
+                U.scatter(sel, [230, 120, 0], size_col=cell * 0.7),
+            ]
+        )
         show = ["rank", "score"] + [f"raw_{c_.name}" for c_ in crit] + ["lon", "lat"]
         U.table(sel[show].round(2))
     elif method == "أقصى تغطية":

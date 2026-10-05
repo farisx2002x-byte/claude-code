@@ -9,9 +9,12 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("TRANSPORT_HUB_WORKSPACE", str(tmp_path))
     monkeypatch.setenv("TRANSPORT_HUB_API_KEYS", json.dumps({"v-key": "viewer", "a-key": "admin"}))
     import importlib
+
     import transport_hub.core.store as store
+
     importlib.reload(store)
     import transport_hub.api as api
+
     importlib.reload(api)
     return TestClient(api.app)
 
@@ -53,4 +56,25 @@ def test_no_keys_configured_rejects(tmp_path, monkeypatch):
     monkeypatch.delenv("TRANSPORT_HUB_API_KEYS", raising=False)
     monkeypatch.setenv("TRANSPORT_HUB_WORKSPACE", str(tmp_path))
     import transport_hub.api as api
+
     assert TestClient(api.app).get("/datasets").status_code == 401
+
+
+def test_report_package_endpoint(client):
+    import io
+    import zipfile
+
+    assert client.post("/reports/package", headers=H("v-key")).status_code == 409  # لا بيانات بعد
+    client.post("/demo/load", headers=H("a-key"))
+    r = client.post("/reports/package?radius=500", headers=H("v-key"))
+    assert r.status_code == 200 and r.headers["content-type"] == "application/zip"
+    zf = zipfile.ZipFile(io.BytesIO(r.content))
+    assert json.loads(zf.read("manifest.json"))["fingerprint"] == r.headers["x-fingerprint"]
+    assert client.post("/reports/package").status_code == 401
+
+
+def test_key_comparison_is_exact(client):
+    assert client.get("/datasets", headers=H("v-key ")).status_code == 401
+    assert client.get("/datasets", headers=H("V-KEY")).status_code == 401
+    assert client.get("/datasets", headers=H("")).status_code == 401
+    assert client.get("/datasets", headers=H("v-key")).status_code == 200

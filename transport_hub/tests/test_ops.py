@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -12,7 +11,9 @@ from transport_hub.transit import gtfs
 
 def trip(tid, s, e, a_to_b=True, route="R"):
     ax, bx = (0.0, 5000.0) if a_to_b else (5000.0, 0.0)
-    return dict(trip_id=tid, route_id=route, direction_id=0 if a_to_b else 1, start=s * 60, end=e * 60, from_x=ax, from_y=0.0, to_x=bx, to_y=0.0, km=6.0)
+    return dict(
+        trip_id=tid, route_id=route, direction_id=0 if a_to_b else 1, start=s * 60, end=e * 60, from_x=ax, from_y=0.0, to_x=bx, to_y=0.0, km=6.0
+    )
 
 
 def test_blocking_hand_example():
@@ -33,20 +34,20 @@ def test_blocking_cardinality_matches_min_cost_fleet():
     t = B.trip_endpoints(f, proj)
     a = B.build_blocks(t, minimize_cost=True)[1]
     b = B.build_blocks(t, minimize_cost=False)[1]
-    assert a["vehicles"] == b["vehicles"] >= a["theoretical_min"]       # نفس الحجم الأدنى بالطريقتين
+    assert a["vehicles"] == b["vehicles"] >= a["theoretical_min"]  # نفس الحجم الأدنى بالطريقتين
     blocks = B.build_blocks(t)[0]
-    assert blocks["trip_id"].is_unique and len(blocks) == len(t)        # كل رحلة في مركبة واحدة بالضبط
+    assert blocks["trip_id"].is_unique and len(blocks) == len(t)  # كل رحلة في مركبة واحدة بالضبط
     # لا تداخل داخل نفس المركبة
     for _, g in blocks.groupby("vehicle"):
         assert (g["start"].to_numpy()[1:] >= g["end"].to_numpy()[:-1]).all()
 
 
 def test_duties_respect_limits():
-    rows = [trip(f"T{i}", 360 + i * 80, 420 + i * 80) for i in range(6)]       # ساعة تشغيل ثم 20 د استراحة
+    rows = [trip(f"T{i}", 360 + i * 80, 420 + i * 80) for i in range(6)]  # ساعة تشغيل ثم 20 د استراحة
     blocks = pd.DataFrame(rows).assign(vehicle=0)
     d, s = B.duties(blocks, max_drive_h=4.5, min_break_min=15, max_duty_h=12)
     assert s["violations"] == 0 and s["pieces"] == 2 and d["drive_h"].max() <= 4.5
-    d2, s2 = B.duties(blocks, max_drive_h=4.5, min_break_min=30, max_duty_h=12)   # لا فرصة تبديل (20 د < 30)
+    d2, s2 = B.duties(blocks, max_drive_h=4.5, min_break_min=30, max_duty_h=12)  # لا فرصة تبديل (20 د < 30)
     assert s2["violations"] >= 1
 
 
@@ -65,13 +66,15 @@ def test_ewt_known_value():
     _, br = P.headway_regularity(a, {"R": 10})
     assert abs(br["ewt_min"].iat[0] - 1.25) < 1e-9
     reg = avl([("d", "R", f"t{i}", "S", i * 600, i * 600) for i in range(5)])
-    assert abs(P.headway_regularity(reg)[1]["ewt_min"].iat[0]) < 1e-9       # انتظام تام: EWT = 0
+    assert abs(P.headway_regularity(reg)[1]["ewt_min"].iat[0]) < 1e-9  # انتظام تام: EWT = 0
 
 
 def test_apc_load():
-    apc = P.clean_apc(pd.DataFrame({"date": "d", "route_id": "R", "trip_id": "t", "stop_id": list("abc"), "boardings": [10, 5, 0], "alightings": [0, 3, 12]}))
+    apc = P.clean_apc(
+        pd.DataFrame({"date": "d", "route_id": "R", "trip_id": "t", "stop_id": list("abc"), "boardings": [10, 5, 0], "alightings": [0, 3, 12]})
+    )
     s = P.apc_summary(apc, 12).iloc[0]
-    assert s["avg_max_load"] == 12 and s["crowded_trips_pct"] == 100       # 12 > 0.9×12
+    assert s["avg_max_load"] == 12 and s["crowded_trips_pct"] == 100  # 12 > 0.9×12
 
 
 def test_missing_columns_message():
@@ -82,8 +85,19 @@ def test_missing_columns_message():
 
 
 def test_maintenance_status():
-    reg = F.clean_register(pd.DataFrame({"vehicle_id": [1, 2, 3], "type": "x", "seats": 72, "year": 2020, "odometer_km": [100_000, 100_000, 100_000],
-                                         "last_service_km": [85_000, 91_000, 98_000], "last_service_date": ["2025-02-20"] * 3}))
+    reg = F.clean_register(
+        pd.DataFrame(
+            {
+                "vehicle_id": [1, 2, 3],
+                "type": "x",
+                "seats": 72,
+                "year": 2020,
+                "odometer_km": [100_000, 100_000, 100_000],
+                "last_service_km": [85_000, 91_000, 98_000],
+                "last_service_date": ["2025-02-20"] * 3,
+            }
+        )
+    )
     m = F.maintenance(reg, 100, today="2025-03-02").set_index("vehicle_id")
     assert m.loc[1, "status"] == "متأخرة" and m.loc[2, "status"] == "قريبة" and m.loc[3, "status"] == "سليمة"
 

@@ -1,4 +1,5 @@
 """تخطيط النقل العام: اقتراح محطات جديدة، اقتراح خط، وتقييم السيناريوهات (محطات مضافة/تغيير التردد)."""
+
 import math
 
 import numpy as np
@@ -49,9 +50,16 @@ def suggest_line(pop, existing_xy, hubs_xy, cand, n_stops=10, radius_m=400, head
     length_km = seg.sum() / 1000
     run_min = length_km / speed_kmh * 60 + len(line) * dwell_s / 60
     cycle = run_min * 2 * (1 + layover)
-    return line, dict(stops=len(line), length_km=round(length_km, 1), run_time_min=round(run_min, 1), headway_min=headway_min,
-                      fleet=math.ceil(cycle / headway_min), pop_covered_new=int(line["gain"].sum()),
-                      coverage_before=round(before, 1), coverage_after=round(after, 1))
+    return line, dict(
+        stops=len(line),
+        length_km=round(length_km, 1),
+        run_time_min=round(run_min, 1),
+        headway_min=headway_min,
+        fleet=math.ceil(cycle / headway_min),
+        pop_covered_new=int(line["gain"].sum()),
+        coverage_before=round(before, 1),
+        coverage_after=round(after, 1),
+    )
 
 
 def scenario_kpis(pop, stops, stop_route, add_stops=None, headway_factor=None, radii=(400, 800)):

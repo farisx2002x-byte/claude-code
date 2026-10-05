@@ -1,17 +1,15 @@
 """التكاليف والعائد: تكلفة التشغيل السنوية، تكلفة الراكب، الانبعاثات، وترتيب المشاريع تحت ميزانية (حقيبة الظهر)."""
-from dataclasses import dataclass
 
-import numpy as np
-import pandas as pd
+from dataclasses import dataclass
 
 
 @dataclass
 class VehicleCost:
     name: str
-    capex: float            # سعر الشراء (ريال)
+    capex: float  # سعر الشراء (ريال)
     life_years: float
-    opex_km: float          # وقود وصيانة لكل كم
-    crew_hour: float        # أجر السائق/ساعة
+    opex_km: float  # وقود وصيانة لكل كم
+    crew_hour: float  # أجر السائق/ساعة
     seats: int
     co2_kg_km: float
 
@@ -29,12 +27,11 @@ def annual_cost(vehicle, n_vehicles, km_day, hours_day, days=300, interest=0.05)
     """التكلفة السنوية (استهلاك رأسمالي بالقسط + تشغيل + طاقم)."""
     c = DEFAULT_COSTS[vehicle] if isinstance(vehicle, str) else vehicle
     r, n = interest, c.life_years
-    crf = r * (1 + r) ** n / ((1 + r) ** n - 1)           # عامل استرداد رأس المال
+    crf = r * (1 + r) ** n / ((1 + r) ** n - 1)  # عامل استرداد رأس المال
     cap = n_vehicles * c.capex * crf
     ops = km_day * days * c.opex_km
     crew = hours_day * days * c.crew_hour
-    return dict(capital=cap, operating=ops, crew=crew, total=cap + ops + crew,
-                co2_t=km_day * days * c.co2_kg_km / 1000)
+    return dict(capital=cap, operating=ops, crew=crew, total=cap + ops + crew, co2_t=km_day * days * c.co2_kg_km / 1000)
 
 
 def cost_per_passenger(total_cost, pax_per_day, days=300):
@@ -45,6 +42,7 @@ def prioritize(projects, budget):
     """ترتيب المشاريع تحت ميزانية: يعظم مجموع الفائدة (مثلاً السكان المخدومين) بحل حقيبة الظهر الدقيق (CP-SAT).
     projects: DataFrame(name, cost, benefit). يرجع (المختار، غير المختار)."""
     from ortools.sat.python import cp_model
+
     p = projects.reset_index(drop=True)
     m = cp_model.CpModel()
     x = [m.NewBoolVar(f"x{i}") for i in range(len(p))]

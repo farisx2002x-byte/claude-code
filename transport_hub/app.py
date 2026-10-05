@@ -1,5 +1,6 @@
 """منصة النقل — تشغيل مستقل:  streamlit run transport_hub/app.py
 للتضمين كصفحة جانبية في تطبيق مضيف: st.Page("transport_hub/host_page.py") أو استدعاء render_hub()."""
+
 import sys
 from pathlib import Path
 
@@ -9,7 +10,7 @@ if str(ROOT) not in sys.path:
 
 import streamlit as st  # noqa: E402
 
-from transport_hub.ui import (p_admin, p_attractors, p_data, p_home, p_ops, p_perf, p_school, p_siting, p_taxi, p_transit)  # noqa: E402
+from transport_hub.ui import p_admin, p_attractors, p_data, p_home, p_ops, p_outputs, p_perf, p_school, p_siting, p_taxi, p_transit  # noqa: E402
 
 PAGES = [
     ("الرئيسية", "🏠", "home", p_home.render),
@@ -22,12 +23,15 @@ PAGES = [
     ("اختيار المواقع", "📍", "siting", p_siting.render),
     ("نقاط الجذب", "⭐", "attractors", p_attractors.render),
     ("الإدارة", "📊", "admin", p_admin.render),
+    ("مركز المخرجات", "📦", "outputs", p_outputs.render),
 ]
 
 
 def main():
     st.set_page_config(page_title="منصة النقل", page_icon="🚍", layout="wide")
-    pages = [st.Page(fn, title=t, icon=i, url_path=u) for t, i, u, fn in PAGES]
+    from transport_hub.ui import common as U
+
+    pages = [st.Page(U.guard(fn), title=t, icon=i, url_path=u) for t, i, u, fn in PAGES]
     st.navigation(pages).run()
 
 

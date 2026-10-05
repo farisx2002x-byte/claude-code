@@ -1,4 +1,5 @@
 """مستوى الخدمة: الترددات، مقاييس الخطوط، الأسطول المطلوب، ومحاور التبديل."""
+
 import math
 
 import numpy as np
@@ -12,6 +13,7 @@ PERIODS = {"الذروة الصباحية": (6, 9), "منتصف النهار": (
 def trip_table(feed, weekday=None):
     """جدول لكل رحلة: الخط، الاتجاه، أول انطلاق، آخر وصول، عدد المحطات، المدة."""
     from transport_hub.transit.gtfs import active_trips
+
     st = feed.stop_times
     g = st.groupby("trip_id").agg(start=("dep", "min"), end=("arr", "max"), n_stops=("stop_id", "size"))
     t = active_trips(feed, weekday).merge(g, left_on="trip_id", right_index=True)
@@ -54,11 +56,21 @@ def route_metrics(feed, weekday=None, proj=None, layover=0.15):
         dirs = g["direction_id"].nunique()
         cycle = dur * dirs * (1 + layover) if dirs else dur
         fleet = math.ceil(cycle / peak_hw) if peak_hw and not np.isnan(peak_hw) else np.nan
-        rows.append(dict(route_id=rid, name=names.get(rid, rid), stops=int(rep["n_stops"]), length_km=round(length_km, 1),
-                         avg_stop_spacing_m=round(seg.mean(), 0) if len(seg) else np.nan, run_time_min=round(dur, 1),
-                         commercial_speed_kmh=round(length_km / (dur / 60), 1) if dur else np.nan,
-                         trips_per_day=len(g), peak_headway_min=round(peak_hw, 1) if peak_hw == peak_hw else np.nan,
-                         peak_fleet=fleet, service_span=f"{int(g['start'].min() // 3600):02d}:00–{int(g['end'].max() // 3600):02d}:00"))
+        rows.append(
+            dict(
+                route_id=rid,
+                name=names.get(rid, rid),
+                stops=int(rep["n_stops"]),
+                length_km=round(length_km, 1),
+                avg_stop_spacing_m=round(seg.mean(), 0) if len(seg) else np.nan,
+                run_time_min=round(dur, 1),
+                commercial_speed_kmh=round(length_km / (dur / 60), 1) if dur else np.nan,
+                trips_per_day=len(g),
+                peak_headway_min=round(peak_hw, 1) if peak_hw == peak_hw else np.nan,
+                peak_fleet=fleet,
+                service_span=f"{int(g['start'].min() // 3600):02d}:00–{int(g['end'].max() // 3600):02d}:00",
+            )
+        )
     return pd.DataFrame(rows)
 
 
@@ -66,7 +78,7 @@ def stop_departures(feed, weekday=None, hours=(7, 9)):
     """عدد المغادرات في الساعة لكل محطة خلال الفترة (للتغطية الموزونة بالتردد)."""
     t = trip_table(feed, weekday)[["trip_id", "route_id"]]
     st = feed.stop_times.merge(t, on="trip_id")
-    h = (st["dep"] // 3600)
+    h = st["dep"] // 3600
     st = st[(h >= hours[0]) & (h < hours[1])]
     span = max(hours[1] - hours[0], 1)
     g = st.groupby("stop_id").agg(deps_per_hour=("trip_id", lambda s: len(s) / span), routes=("route_id", "nunique"))
@@ -78,6 +90,7 @@ def hubs(feed, proj, radius=200):
     from scipy.sparse import coo_matrix
     from scipy.sparse.csgraph import connected_components
     from scipy.spatial import cKDTree
+
     t = trip_table(feed)[["trip_id", "route_id"]]
     st = feed.stop_times.merge(t, on="trip_id")[["stop_id", "route_id"]].drop_duplicates()
     stops = feed.stops[feed.stops["stop_id"].isin(st["stop_id"])].reset_index(drop=True)

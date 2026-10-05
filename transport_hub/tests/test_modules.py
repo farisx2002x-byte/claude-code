@@ -23,6 +23,7 @@ def city():
     d = DC.build_all()
     proj = geo.Projector.for_points(d["population"].lon, d["population"].lat)
     from transport_hub.core import data as D
+
     pop = D.clean_population(d["population"], proj)
     feed = gtfs.from_tables(d["gtfs"])
     return dict(pop=pop, poi=D.clean_poi(d["poi"], proj), feed=feed, proj=proj, trips=D.clean_trips(d["trips"], proj), raw=d)
@@ -53,7 +54,7 @@ def test_headway_and_fleet(city):
     rm = service.route_metrics(city["feed"], proj=city["proj"])
     r1 = rm.set_index("route_id").loc["R1"]
     assert r1["peak_headway_min"] == 10
-    assert r1["peak_fleet"] >= int(r1["run_time_min"] * 2 / 10)       # على الأقل زمن الدورة ÷ التردد
+    assert r1["peak_fleet"] >= int(r1["run_time_min"] * 2 / 10)  # على الأقل زمن الدورة ÷ التردد
 
 
 def test_coverage_monotonic_in_radius(city):
@@ -68,12 +69,11 @@ def test_accessibility_index_improves_with_frequency(city):
     k0, _ = planning.scenario_kpis(city["pop"], st, sr)
     k1, _ = planning.scenario_kpis(city["pop"], st, sr, headway_factor={r: 0.5 for r in sr["route_id"].unique()})
     assert k1["avg_access_index"] > k0["avg_access_index"]
-    assert k1["covered_400_pct"] == k0["covered_400_pct"]               # التردد لا يغير التغطية المكانية
+    assert k1["covered_400_pct"] == k0["covered_400_pct"]  # التردد لا يغير التغطية المكانية
 
 
 def test_new_stops_increase_coverage(city):
     st = COV.stops_frame(city["feed"], city["proj"])
-    sr = service.stop_route_freq(city["feed"])
     cand = geo.candidate_grid(city["pop"]["x"], city["pop"]["y"], 250)
     sel, (b, a) = planning.suggest_stops(city["pop"], st[["x", "y"]].to_numpy(), cand, 400, 6)
     assert a > b and (sel["gain"] > 0).all() and sel["gain"].is_monotonic_decreasing
@@ -84,8 +84,15 @@ def tiny_feed():
     stops = pd.DataFrame({"stop_id": ["A", "B", "C"], "stop_name": list("ABC"), "stop_lat": [21.5, 21.5, 21.5], "stop_lon": [39.10, 39.15, 39.20]})
     routes = pd.DataFrame({"route_id": ["X", "Y"]})
     trips = pd.DataFrame({"route_id": ["X", "Y"], "service_id": ["WK"] * 2, "trip_id": ["t1", "t2"], "direction_id": [0, 0]})
-    st = pd.DataFrame({"trip_id": ["t1", "t1", "t2", "t2"], "arrival_time": ["08:00:00", "08:10:00", "08:20:00", "08:30:00"],
-                       "departure_time": ["08:00:00", "08:10:00", "08:20:00", "08:30:00"], "stop_id": ["A", "B", "B", "C"], "stop_sequence": [0, 1, 0, 1]})
+    st = pd.DataFrame(
+        {
+            "trip_id": ["t1", "t1", "t2", "t2"],
+            "arrival_time": ["08:00:00", "08:10:00", "08:20:00", "08:30:00"],
+            "departure_time": ["08:00:00", "08:10:00", "08:20:00", "08:30:00"],
+            "stop_id": ["A", "B", "B", "C"],
+            "stop_sequence": [0, 1, 0, 1],
+        }
+    )
     return gtfs.from_tables(dict(stops=stops, routes=routes, trips=trips, stop_times=st))
 
 
@@ -97,31 +104,35 @@ def test_csa_transfer_and_miss():
     x, y = proj.xy(a.stop_lon, a.stop_lat)
     arr = r.earliest_arrival(x[0], y[0], 7.95 * 3600)
     ids = {s: arr[i] for s, i in r.sid.items()}
-    assert ids["B"] == 8 * 3600 + 600 and ids["C"] == 8 * 3600 + 1800      # تبديل في B على الرحلة الثانية
-    late = r.earliest_arrival(x[0], y[0], 8.2 * 3600)                       # فاتت الرحلة الأولى
+    assert ids["B"] == 8 * 3600 + 600 and ids["C"] == 8 * 3600 + 1800  # تبديل في B على الرحلة الثانية
+    late = r.earliest_arrival(x[0], y[0], 8.2 * 3600)  # فاتت الرحلة الأولى
     assert late[r.sid["C"]] > 1e17
 
 
 # ───────── اختيار المواقع ─────────
 def test_greedy_vs_exact_and_bounds():
     rng = np.random.default_rng(0)
-    dem = rng.uniform(0, 3000, (200, 2)); w = rng.integers(1, 20, 200).astype(float)
+    dem = rng.uniform(0, 3000, (200, 2))
+    w = rng.integers(1, 20, 200).astype(float)
     cand = rng.uniform(0, 3000, (80, 2))
     g, (b, a) = SC.max_coverage(dem, w, cand, 500, 5)
     ex = SC.max_coverage_exact(dem, w, cand, 500, 5, time_s=10)
     cov_ex = np.zeros(200, bool)
-    for l in __import__("scipy.spatial", fromlist=["cKDTree"]).cKDTree(dem).query_ball_point(cand[ex], 500):
-        cov_ex[l] = True
+    for lst in __import__("scipy.spatial", fromlist=["cKDTree"]).cKDTree(dem).query_ball_point(cand[ex], 500):
+        cov_ex[lst] = True
     opt = 100 * w[cov_ex].sum() / w.sum()
-    assert a <= opt + 1e-6 and a >= 0.63 * opt                              # ضمان التقريب الجشع
+    assert a <= opt + 1e-6 and a >= 0.63 * opt  # ضمان التقريب الجشع
     assert g["cum_covered_pct"].is_monotonic_increasing
 
 
 def test_p_median_matches_brute_force_small():
     rng = np.random.default_rng(1)
-    dem = rng.uniform(0, 1000, (30, 2)); w = rng.integers(1, 10, 30).astype(float); cand = rng.uniform(0, 1000, (10, 2))
+    dem = rng.uniform(0, 1000, (30, 2))
+    w = rng.integers(1, 10, 30).astype(float)
+    cand = rng.uniform(0, 1000, (10, 2))
     _, _, cost = SC.p_median(dem, w, cand, 2)
     from scipy.spatial.distance import cdist
+
     D = cdist(dem, cand)
     best = min((w * D[:, list(c)].min(axis=1)).sum() for c in itertools.combinations(range(10), 2))
     assert cost <= best * 1.05
@@ -131,7 +142,7 @@ def test_mcda_normalization_and_spacing():
     cand = pd.DataFrame({"x": np.arange(10) * 100.0, "y": 0.0})
     crit = [mcda.Criterion("a", np.arange(10.0), 1.0, True), mcda.Criterion("b", np.arange(10.0), 1.0, False)]
     s = mcda.score(cand, crit)
-    assert np.allclose(s["score"], 50)                                       # معياران متعاكسان بنفس الوزن
+    assert np.allclose(s["score"], 50)  # معياران متعاكسان بنفس الوزن
     crit2 = [mcda.Criterion("a", np.arange(10.0), 1.0, True)]
     top = mcda.pick(mcda.score(cand, crit2), 3, 250)
     assert len(top) == 3 and top["x"].diff().abs().dropna().min() >= 250
@@ -139,9 +150,9 @@ def test_mcda_normalization_and_spacing():
 
 # ───────── التاكسي ─────────
 def test_erlang_c_known_values():
-    assert abs(TF.erlang_c(1, 0.5) - 0.5) < 1e-9                             # M/M/1: احتمال الانتظار = ρ
+    assert abs(TF.erlang_c(1, 0.5) - 0.5) < 1e-9  # M/M/1: احتمال الانتظار = ρ
     assert TF.erlang_c(2, 2.5) == 1.0
-    assert TF.avg_wait_min(14, 60, 10) < TF.avg_wait_min(11, 60, 10) < float("inf")         # مركبات أكثر → انتظار أقل
+    assert TF.avg_wait_min(14, 60, 10) < TF.avg_wait_min(11, 60, 10) < float("inf")  # مركبات أكثر → انتظار أقل
     n = TF.vehicles_for_wait(60, 20, 3)
     assert TF.avg_wait_min(n, 60, 20) <= 3 and TF.avg_wait_min(n - 1, 60, 20) > 3
 
@@ -173,7 +184,7 @@ def test_scorecard_status():
 def test_knapsack_optimal():
     p = pd.DataFrame({"name": list("ABCD"), "cost": [10, 20, 30, 40], "benefit": [10, 30, 36, 40]})
     ch, _ = finance.prioritize(p, 50)
-    assert set(ch["name"]) == {"B", "C"}                                     # 66 أفضل من A+D=50 أو A+B+... ضمن 50
+    assert set(ch["name"]) == {"B", "C"}  # 66 أفضل من A+D=50 أو A+B+... ضمن 50
 
 
 def test_annual_cost_components():
@@ -185,7 +196,7 @@ def test_gravity_conserves_trips(city):
     z, od, T = DM.gravity(city["pop"], city["poi"], 0.25, 2.0)
     assert abs(T.sum() - city["pop"]["pop"].sum() * 2.0) < 1e-3
     z2, _, _ = DM.gravity(city["pop"], city["poi"], 1.0, 2.0)
-    assert z2["avg_trip_km"].mean() < z["avg_trip_km"].mean()               # β أكبر → رحلات أقصر
+    assert z2["avg_trip_km"].mean() < z["avg_trip_km"].mean()  # β أكبر → رحلات أقصر
 
 
 def test_timetable_generates_valid_feed(city):

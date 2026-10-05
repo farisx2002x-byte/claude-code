@@ -1,4 +1,5 @@
 """مساحة عمل على القرص: تحفظ وتقرأ مجموعات البيانات (الطلب، نقاط الجذب، GTFS، رحلات التاكسي...)."""
+
 import json
 import os
 import pickle
@@ -46,6 +47,19 @@ class Workspace:
         p = self._p("_meta", "json")
         return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
 
+    def set_source(self, name, source):
+        """يسجل مصدر مجموعة البيانات: "demo" (اصطناعي) أو "upload" (مرفوع من المستخدم)."""
+        src = self.obj("_sources") or {}
+        src[name] = source
+        self.save_obj("_sources", src)
+
+    def sources(self):
+        return self.obj("_sources") or {}
+
+    def is_demo(self):
+        """True لو أي مجموعة بيانات محمّلة من المدينة التجريبية (فتُوسم المخرجات بتنبيه)."""
+        return "demo" in self.sources().values()
+
     def log(self, event, **kw):
         """سجل تدقيق بسيط (JSONL): من/متى/ماذا."""
         with open(self._p("audit", "jsonl"), "a", encoding="utf-8") as f:
@@ -55,7 +69,7 @@ class Workspace:
         p = self._p("audit", "jsonl")
         if not p.exists():
             return pd.DataFrame(columns=["time", "event"])
-        rows = [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines()[-n:]]
+        rows = [json.loads(ln) for ln in p.read_text(encoding="utf-8").splitlines()[-n:]]
         return pd.DataFrame(rows)
 
     def clear(self):

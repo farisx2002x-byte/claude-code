@@ -1,4 +1,5 @@
 """بطاقة مؤشرات الأداء للإدارة: القيمة الفعلية مقابل المستهدف مع حالة (أخضر/أصفر/أحمر)."""
+
 import pandas as pd
 
 # (المفتاح, العنوان, الوحدة, المستهدف, الاتجاه: "up" الأعلى أفضل / "down" الأقل أفضل)
@@ -19,7 +20,7 @@ KPIS = [
     ("fleet_overdue", "مركبات صيانتها متأخرة", "%", 5.0, "down"),
     ("equity_gini", "عدم المساواة في الخدمة (Gini)", "", 0.35, "down"),
 ]
-AMBER = 0.15       # ضمن 15% من المستهدف = أصفر
+AMBER = 0.15  # ضمن 15% من المستهدف = أصفر
 
 
 def status(actual, target, direction):
@@ -41,6 +42,15 @@ def build(values, targets=None):
     for key, title, unit, tgt, d in KPIS:
         t = targets.get(key, tgt)
         v = values.get(key)
-        rows.append(dict(المؤشر=title, الوحدة=unit, الفعلي=None if v is None else round(float(v), 2), المستهدف=t,
-                         الفرق=None if v is None else round(float(v) - t, 2), الحالة=status(v, t, d), key=key))
+        rows.append(
+            dict(
+                المؤشر=title,
+                الوحدة=unit,
+                الفعلي=None if v is None else round(float(v), 2),
+                المستهدف=t,
+                الفرق=None if v is None else round(float(v) - t, 2),
+                الحالة=status(v, t, d),
+                key=key,
+            )
+        )
     return pd.DataFrame(rows)

@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "transport-hub"
+version = "1.1.0"
+description = "منصة النقل: نقل عام، تاكسي، نقل مدرسي، اختيار مواقع، نقاط جذب، إدارة وتقارير"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy", "pandas", "scipy", "pyproj", "pyarrow", "openpyxl", "ortools>=9.10",
+    "streamlit>=1.46", "pydeck", "matplotlib",
+]
+
+[project.optional-dependencies]
+api = ["fastapi", "httpx", "uvicorn"]
+dev = ["pytest", "pytest-cov", "ruff", "fastapi", "httpx", "uvicorn"]
+
+[project.scripts]
+transport-hub = "transport_hub.cli:main"
+transport-hub-api = "transport_hub.cli:api"
+
+[tool.setuptools]
+packages = ["transport_hub", "transport_hub.core", "transport_hub.transit", "transport_hub.taxi", "transport_hub.admin",
+            "transport_hub.siting", "transport_hub.ops", "transport_hub.ui", "transport_hub.exports"]
+package-dir = {"transport_hub" = "."}
+
+[tool.ruff]
+line-length = 150
+target-version = "py310"
+extend-exclude = ["workspace"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["B905", "E501"]        # zip(strict) أسلوبي؛ الأسطر الطويلة تحكمها ruff format
+
+[tool.ruff.lint.isort]
+known-first-party = ["transport_hub"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning", "ignore::PendingDeprecationWarning", "ignore:.*httpx.*:Warning"]
+
+[tool.coverage.run]
+source = ["transport_hub"]
+omit = ["*/tests/*", "*/ui/*", "*/app.py"]

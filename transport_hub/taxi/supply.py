@@ -1,4 +1,5 @@
 """توازن العرض والطلب للتاكسي وخطة إعادة التوزيع."""
+
 import numpy as np
 import pandas as pd
 from scipy.optimize import linprog
@@ -10,6 +11,7 @@ def zone_balance(trips, zones, hour, supply=None):
     """لكل منطقة في ساعة معينة: الطلب (التقاطات/يوم) والعرض (مركبات متاحة).
     supply: جدول اختياري (zone_index أو x,y, vehicles). لو ما وُجد نقدّر العرض بالتوصيلات (المركبات اللي أنهت رحلتها هناك)."""
     from transport_hub.taxi.demand import n_days
+
     d = n_days(trips)
     zxy = zones[["x", "y"]].to_numpy()
     t = trips[trips["hour"] == hour]
@@ -40,19 +42,33 @@ def rebalance_plan(bal, min_move=0.5):
         return pd.DataFrame(columns=["from", "to", "vehicles", "km"])
     s = np.floor(sur["balance"].to_numpy())
     dm = np.ceil(-dfc["balance"].to_numpy())
-    D = np.hypot(sur["x"].to_numpy()[:, None] - dfc["x"].to_numpy()[None, :], sur["y"].to_numpy()[:, None] - dfc["y"].to_numpy()[None, :]) * geo.DETOUR / 1000
+    D = (
+        np.hypot(sur["x"].to_numpy()[:, None] - dfc["x"].to_numpy()[None, :], sur["y"].to_numpy()[:, None] - dfc["y"].to_numpy()[None, :])
+        * geo.DETOUR
+        / 1000
+    )
     ns, nd = D.shape
     c = D.ravel()
     A_ub, b_ub = [], []
     for i in range(ns):
-        row = np.zeros(ns * nd); row[i * nd:(i + 1) * nd] = 1; A_ub.append(row); b_ub.append(s[i])
+        row = np.zeros(ns * nd)
+        row[i * nd : (i + 1) * nd] = 1
+        A_ub.append(row)
+        b_ub.append(s[i])
     for j in range(nd):
-        row = np.zeros(ns * nd); row[j::nd] = 1; A_ub.append(row); b_ub.append(dm[j])
+        row = np.zeros(ns * nd)
+        row[j::nd] = 1
+        A_ub.append(row)
+        b_ub.append(dm[j])
     total = min(s.sum(), dm.sum())
     res = linprog(c, A_ub=np.array(A_ub), b_ub=b_ub, A_eq=[np.ones(ns * nd)], b_eq=[total], bounds=(0, None), method="highs")
     if not res.success:
         return pd.DataFrame(columns=["from", "to", "vehicles", "km"])
     x = np.round(res.x.reshape(ns, nd)).astype(int)
-    rows = [dict(**{"from": sur["name"].iat[i], "to": dfc["name"].iat[j]}, vehicles=int(x[i, j]), km=round(float(D[i, j]), 1))
-            for i in range(ns) for j in range(nd) if x[i, j] > 0]
+    rows = [
+        dict(**{"from": sur["name"].iat[i], "to": dfc["name"].iat[j]}, vehicles=int(x[i, j]), km=round(float(D[i, j]), 1))
+        for i in range(ns)
+        for j in range(nd)
+        if x[i, j] > 0
+    ]
     return pd.DataFrame(rows).sort_values("vehicles", ascending=False).reset_index(drop=True)

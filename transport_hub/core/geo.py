@@ -1,11 +1,12 @@
 """أدوات جغرافية مشتركة: إسقاط تلقائي (UTM)، مسافات، شبكات خلايا، وأقرب نقطة."""
+
 import numpy as np
 import pandas as pd
 from pyproj import Transformer
 from scipy.spatial import cKDTree
 
-DETOUR = 1.3          # معامل التعرج: المسافة الفعلية على الشوارع ≈ 1.3 × الخط المستقيم (تقديري)
-WALK_KMH = 4.8        # سرعة المشي
+DETOUR = 1.3  # معامل التعرج: المسافة الفعلية على الشوارع ≈ 1.3 × الخط المستقيم (تقديري)
+WALK_KMH = 4.8  # سرعة المشي
 
 
 def utm_epsg(lon, lat):

@@ -1,0 +1,38 @@
+name: Transport Hub CI
+
+on:
+  push:
+    paths: ["transport_hub/**", ".github/workflows/transport-hub-ci.yml"]
+  pull_request:
+    paths: ["transport_hub/**", ".github/workflows/transport-hub-ci.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: transport-hub-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        python: ["3.10", "3.12"]
+    defaults:
+      run:
+        working-directory: transport_hub
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: transport_hub/pyproject.toml
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check . && ruff format --check .
+      - name: Tests with coverage
+        run: python -m pytest tests -q --cov=transport_hub --cov-fail-under=90

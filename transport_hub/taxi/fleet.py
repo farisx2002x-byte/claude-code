@@ -1,7 +1,7 @@
 """حجم أسطول التاكسي ومؤشرات الأداء، مع نموذج طوابير (Erlang C) لتقدير الانتظار."""
+
 import math
 
-import numpy as np
 import pandas as pd
 
 from transport_hub.taxi.demand import n_days

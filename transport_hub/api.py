@@ -2,6 +2,8 @@
 
 الأمان: مفاتيح API من متغير البيئة TRANSPORT_HUB_API_KEYS كـ JSON مثل {"مفتاح-المشاهد":"viewer","مفتاح-المدير":"admin"}
 الترويسة: X-API-Key. بدون ضبط المفاتيح كل المسارات (عدا /health) ترفض الطلب. المشاهد يقرأ فقط، والمدير يعدّل."""
+
+import hmac
 import json
 import os
 
@@ -22,14 +24,24 @@ def _keys():
         return {}
 
 
+def _role_of(key):
+    """دور المفتاح بمقارنة بزمن ثابت (يمنع استنتاج المفتاح من زمن الاستجابة)."""
+    found = None
+    for k, role in _keys().items():
+        if hmac.compare_digest(k.encode(), (key or "").encode()):
+            found = role
+    return found
+
+
 def auth(role="viewer"):
     def dep(x_api_key: str = Header(default="")):
-        r = _keys().get(x_api_key)
+        r = _role_of(x_api_key)
         if r is None:
             raise HTTPException(401, "مفتاح API غير صالح أو غير مضبوط")
         if role == "admin" and r != "admin":
             raise HTTPException(403, "هذه العملية تحتاج صلاحية مدير")
         return r
+
     return dep
 
 
@@ -51,6 +63,7 @@ def _need(*names):
 
 def _feed():
     from transport_hub.transit import gtfs
+
     return gtfs.from_tables(_need("gtfs")["gtfs"])
 
 
@@ -61,6 +74,7 @@ def _proj():
 def _clean(o):
     """يحوّل نتائج numpy/pandas لقيم JSON."""
     import pandas as pd
+
     if isinstance(o, pd.DataFrame):
         return json.loads(o.replace([np.inf, -np.inf], None).to_json(orient="records", force_ascii=False))
     if isinstance(o, dict):
@@ -86,6 +100,7 @@ def datasets():
 def demo_load():
     from transport_hub.core import data as D
     from transport_hub.core import demo_city
+
     w, d = ws(), demo_city.build_all()
     p = geo.Projector.for_points(d["population"].lon, d["population"].lat)
     w.save_obj("proj_epsg", p.epsg)
@@ -94,13 +109,34 @@ def demo_load():
     w.save_obj("gtfs", d["gtfs"])
     w.save_df("trips", D.clean_trips(d["trips"], p))
     w.save_df("stands", p.attach(d["stands"]))
+    for k in ("population", "poi", "gtfs", "trips", "stands"):
+        w.set_source(k, "demo")
     w.log("demo_loaded_api")
     return {"loaded": True}
+
+
+@app.post("/reports/package", dependencies=[Depends(auth())])
+def reports_package(radius: int = 400):
+    """حزمة المخرجات الموثّقة (zip: Excel + تقرير HTML + GIS + manifest) من بيانات مساحة العمل."""
+    from fastapi.responses import Response
+
+    from transport_hub.exports import builder
+
+    try:
+        data, meta = builder.build_package(ws(), radius=radius)
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from e
+    return Response(
+        data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="transport_package_{meta["fingerprint"]}.zip"', "X-Fingerprint": meta["fingerprint"]},
+    )
 
 
 @app.get("/transit/routes", dependencies=[Depends(auth())])
 def transit_routes():
     from transport_hub.transit import service
+
     return _clean(service.route_metrics(_feed(), proj=_proj()))
 
 
@@ -108,6 +144,7 @@ def transit_routes():
 def transit_coverage(radius: int = 400):
     from transport_hub.transit import coverage as COV
     from transport_hub.transit import planning, service
+
     pop, feed, proj = _need("population")["population"], _feed(), _proj()
     st = COV.stops_frame(feed, proj)
     k, cov = planning.scenario_kpis(pop, st, service.stop_route_freq(feed), radii=(radius,))
@@ -124,6 +161,7 @@ class SitingReq(BaseModel):
 def siting_max_coverage(req: SitingReq):
     from transport_hub.transit import coverage as COV
     from transport_hub.transit import planning
+
     pop, proj = _need("population")["population"], _proj()
     ex = None
     w = ws().obj("gtfs")
@@ -137,26 +175,35 @@ def siting_max_coverage(req: SitingReq):
 @app.get("/taxi/kpis", dependencies=[Depends(auth())])
 def taxi_kpis():
     from transport_hub.taxi import fleet
+
     return _clean(fleet.kpis(_need("trips")["trips"]))
 
 
 @app.get("/taxi/fleet", dependencies=[Depends(auth())])
 def taxi_fleet(wait: float = 5.0, util: float = 0.75):
     from transport_hub.taxi import fleet
+
     fh = fleet.fleet_by_hour(_need("trips")["trips"], wait, 6.0, util)
     return _clean({"peak_vehicles": int(fh["needed"].max()), "by_hour": fh})
 
 
 @app.get("/admin/scorecard", dependencies=[Depends(auth())])
 def scorecard():
-    from transport_hub.admin import equity, scorecard as SC
+    from transport_hub.admin import equity
+    from transport_hub.admin import scorecard as SC
     from transport_hub.transit import coverage as COV
     from transport_hub.transit import planning, service
+
     pop, feed, proj = _need("population")["population"], _feed(), _proj()
     st = COV.stops_frame(feed, proj)
     k, cov = planning.scenario_kpis(pop, st, service.stop_route_freq(feed))
     rm = service.route_metrics(feed, proj=proj)
-    vals = dict(transit_cov400=k["covered_400_pct"], transit_cov800=k["covered_800_pct"], transit_ai=k["avg_access_index"],
-                transit_headway=float(rm["peak_headway_min"].mean()), transit_no_service=100 * k["pop_no_service"] / pop["pop"].sum(),
-                equity_gini=equity.gini(cov["access_index"], cov["pop"]))
+    vals = dict(
+        transit_cov400=k["covered_400_pct"],
+        transit_cov800=k["covered_800_pct"],
+        transit_ai=k["avg_access_index"],
+        transit_headway=float(rm["peak_headway_min"].mean()),
+        transit_no_service=100 * k["pop_no_service"] / pop["pop"].sum(),
+        equity_gini=equity.gini(cov["access_index"], cov["pop"]),
+    )
     return _clean(SC.build(vals).drop(columns="key"))

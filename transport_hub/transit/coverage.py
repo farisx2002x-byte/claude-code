@@ -1,4 +1,5 @@
 """تغطية خدمة النقل العام وسهولة الوصول: نسبة التغطية، مؤشر مستوى الخدمة (على طريقة PTAL)، والفجوات."""
+
 import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
@@ -6,8 +7,8 @@ from scipy.spatial import cKDTree
 from transport_hub.core import geo
 
 GRADES = [(2.5, "1 — ضعيف جداً"), (5, "2 — ضعيف"), (10, "3 — متوسط"), (15, "4 — جيد"), (20, "5 — جيد جداً"), (1e9, "6 — ممتاز")]
-SWT_EXTRA_MIN = 2.0      # زمن إضافي لعدم الانتظام (تقديري)
-WALK_MAX_M = 640         # ≈ 8 دقائق مشي (حد PTAL للحافلات)
+SWT_EXTRA_MIN = 2.0  # زمن إضافي لعدم الانتظام (تقديري)
+WALK_MAX_M = 640  # ≈ 8 دقائق مشي (حد PTAL للحافلات)
 
 
 def grade_of(ai):
@@ -68,7 +69,6 @@ def accessibility_index(demand, stops, stop_route, walk_max=WALK_MAX_M):
 
 def summary(cov, by="district"):
     """ملخص التغطية: إجمالي ولكل حي (موزون بالسكان)."""
-    tot = cov["pop"].sum()
     rows = {"الإجمالي": cov}
     if by in cov:
         rows.update({k: g for k, g in cov.groupby(by)})
