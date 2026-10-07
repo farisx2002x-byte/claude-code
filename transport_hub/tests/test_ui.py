@@ -125,3 +125,18 @@ def test_learn_congestion_button_flow(ws_env):
     btn.click().run()
     assert not at.exception, [e.value for e in at.exception]
     assert Workspace().obj("congestion") is not None
+
+
+def test_admin_scenario_comparison_view(ws_env):
+    code = script("p_admin").replace(
+        "p_admin.render()",
+        """from transport_hub.admin.scenarios import ScenarioBook
+b = ScenarioBook(U.ws())
+b.save("أساس", {}, dict(covered_400_pct=30.0, covered_800_pct=60.0, avg_access_index=2.0, pop_no_service=1000))
+b.save("خط جديد", {}, dict(covered_400_pct=40.0, covered_800_pct=65.0, avg_access_index=2.5, pop_no_service=700), cost=2000000)
+p_admin.render()""",
+    )
+    at = AppTest.from_string(code, default_timeout=300).run()
+    assert not at.exception, [e.value for e in at.exception]
+    at.selectbox(key="hub_ad_base").set_value("خط جديد").run()
+    assert not at.exception, [e.value for e in at.exception]

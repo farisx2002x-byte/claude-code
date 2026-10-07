@@ -13,7 +13,7 @@ from transport_hub.transit import csa, gtfs
 def test_version_single_source():
     from transport_hub.exports import meta
 
-    assert meta.VERSION == __version__ == "1.3.0"
+    assert meta.VERSION == __version__ == "1.4.0"
     import re
     from pathlib import Path
 
@@ -83,3 +83,39 @@ def test_logger_respects_env(monkeypatch):
     from transport_hub.core.log import get_logger
 
     assert get_logger("x").name == "transport_hub.x"
+
+
+def _book(tmp_path):
+    book = ScenarioBook(Workspace(tmp_path))
+    book.save("أساس", {}, dict(covered_400_pct=30.0, covered_800_pct=60.0, avg_access_index=2.0, pop_no_service=1000))
+    book.save("أ", {}, dict(covered_400_pct=40.0, covered_800_pct=65.0, avg_access_index=2.5, pop_no_service=700), cost=2_000_000)
+    book.save("ب", {}, dict(covered_400_pct=35.0, covered_800_pct=60.0, avg_access_index=1.9, pop_no_service=1200))
+    return book
+
+
+def test_scenario_verdicts_follow_direction(tmp_path):
+    d = _book(tmp_path).detailed()
+    v = d.set_index(["scenario", "kpi"])["verdict"]
+    assert v[("أ", "pop_no_service")] == "أفضل"  # الأقل أفضل
+    assert v[("ب", "pop_no_service")] == "أسوأ"
+    assert v[("ب", "covered_800_pct")] == "ثابت"
+
+
+def test_scenario_rank_and_cost_effectiveness(tmp_path):
+    book = _book(tmp_path)
+    r = book.rank()
+    assert book.best() == "أ" and r.loc["أ", "rank"] == 1 and r.loc["أ", "score_vs_base"] > 0
+    assert r["score"].between(0, 100).all()
+    ce = book.cost_effectiveness()
+    assert ce.loc[ce.scenario == "أ", "cost_per_point"].iloc[0] == 200_000  # 2 مليون / 10 نقاط
+    assert ce.loc[ce.scenario == "ب", "cost_per_point"].isna().all()  # بلا تكلفة
+    book.set_cost("ب", 500_000)
+    assert book.cost_effectiveness().set_index("scenario").loc["ب", "cost_per_point"] == 100_000
+    assert ScenarioBook(Workspace(tmp_path)).costs()["أ"] == 2_000_000
+
+
+def test_scenario_rank_degenerate(tmp_path):
+    book = ScenarioBook(Workspace(tmp_path))
+    assert book.rank().empty and book.best() is None and book.detailed().empty
+    book.save("وحيد", {}, dict(covered_400_pct=10.0))
+    assert book.rank().loc["وحيد", "score"] == 50.0  # لا نطاق للتطبيع

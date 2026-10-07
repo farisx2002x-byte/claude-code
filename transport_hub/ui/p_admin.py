@@ -19,6 +19,62 @@ SCHOOL_PICKLE = Path(__file__).resolve().parents[2] / "bus_access_project" / "wo
 SCHOOL_ROUTES = Path(__file__).resolve().parents[2] / "bus_access_project" / "work" / "routes.pkl"
 
 
+KPI_AR = {
+    "covered_400_pct": "تغطية 400 م %",
+    "covered_800_pct": "تغطية 800 م %",
+    "avg_access_index": "متوسط مؤشر الخدمة",
+    "pop_no_service": "سكان بلا خدمة",
+}
+
+
+def _scenarios_view(ws, book, cmp):
+    names = list(book.data)
+    base = st.selectbox("خط الأساس للمقارنة", names, key="hub_ad_base")
+    det = book.detailed(base)
+    rk = book.rank(baseline=base)
+    best = rk.index[0]
+    U.kpis([(len(names), "سيناريوهات محفوظة"), (best, "الأعلى درجة", "ok"), (f"{rk.loc[best, 'score']:.0f}/100", "درجته")])
+    st.markdown("**الترتيب** (درجة مرجّحة: تغطية 400 م 35% · مؤشر الخدمة 30% · سكان بلا خدمة 20% · تغطية 800 م 15%)")
+    t = rk.reset_index().rename(
+        columns={"index": "السيناريو", "score": "الدرجة", "score_vs_base": "الفرق عن الأساس", "cost": "التكلفة (ريال)", "rank": "الرتبة"}
+    )
+    U.table(t[["الرتبة", "السيناريو", "الدرجة", "الفرق عن الأساس", "التكلفة (ريال)"]])
+    piv = det.pivot_table(index="scenario", columns="kpi", values="value").rename(columns=KPI_AR).loc[names]
+    st.markdown("**المؤشرات جنباً إلى جنب**")
+    st.dataframe(piv.round(2), width="stretch")
+    st.markdown("**الفرق عن الأساس**")
+    d = det[det["scenario"] != base].copy()
+    d["kpi"] = d["kpi"].map(lambda k: KPI_AR.get(k, k))
+    d = d.rename(
+        columns={
+            "scenario": "السيناريو",
+            "kpi": "المؤشر",
+            "base": "الأساس",
+            "value": "السيناريو ←",
+            "delta": "الفرق",
+            "delta_pct": "الفرق %",
+            "verdict": "الحكم",
+        }
+    )
+    U.table(d.round(2))
+    st.markdown("**تكلفة السيناريو وفعالية التكلفة**")
+    c1, c2 = st.columns([2, 1])
+    nm = c1.selectbox("السيناريو", names, key="hub_ad_cn")
+    cost = c2.number_input("التكلفة (ريال)", 0, 10**10, int(book.data[nm].get("cost") or 0), 100_000, key="hub_ad_cv")
+    if st.button("احفظ التكلفة", key="hub_ad_cs"):
+        book.set_cost(nm, cost or None)
+        st.rerun()
+    ce = book.cost_effectiveness(baseline=base)
+    if len(ce) and ce["cost_per_point"].notna().any():
+        U.table(ce.rename(columns={"scenario": "السيناريو", "gain": "تحسّن التغطية (نقطة)", "cost": "التكلفة", "cost_per_point": "ريال لكل نقطة"}))
+    else:
+        st.caption("أدخل تكلفة السيناريو ليظهر ترتيب فعالية التكلفة.")
+    name = st.selectbox("حذف سيناريو", [""] + names, key="hub_ad_del")
+    if name and st.button("حذف", key="hub_ad_delb"):
+        book.delete(name)
+        st.rerun()
+
+
 def _school_kpis():
     try:
         S = pickle.loads(SCHOOL_PICKLE.read_bytes())
@@ -146,11 +202,7 @@ def render():
         if cmp.empty:
             U.empty("ما فيه سيناريوهات محفوظة. من صفحة النقل العام (التخطيط) احفظ سيناريو ليظهر هنا.")
         else:
-            st.dataframe(cmp.round(2), width="stretch")
-            name = st.selectbox("حذف سيناريو", [""] + list(book.data), key="hub_ad_del")
-            if name and st.button("حذف", key="hub_ad_delb"):
-                book.delete(name)
-                st.rerun()
+            _scenarios_view(ws, book, cmp)
 
     with tabs[3]:
         st.caption("نموذج تكلفة تقديري: قيم افتراضية قابلة للتعديل، لحساب مشاريع مرشحة وترتيبها تحت ميزانية محددة.")
