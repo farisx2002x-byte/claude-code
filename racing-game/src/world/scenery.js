@@ -20,7 +20,7 @@ export const THEME_SETTINGS = {
   dusk: {
     skyTop: '#1d1b4a', skyMid: '#a3477a', skyHorizon: '#ff9a52',
     fog: '#c9708a', fogNear: 160, fogFar: 1000,
-    hemiSky: '#ffc59e', hemiGround: '#4a2d3a', hemiI: 1.0,
+    hemiSky: '#ffc59e', hemiGround: '#5a3d4a', hemiI: 1.35,
     sun: '#ffb070', sunI: 1.25, sunDir: [0.8, 0.45, -0.6],
     buildingColors: ['#5b4a5e', '#6b5560', '#4d4058', '#7a6168', '#5a5470'],
     exposure: 1.0,
@@ -126,7 +126,7 @@ export function buildScenery(path, def, quality) {
   const winTex = windowTexture(def.theme);
   const bMat = keep(new THREE.MeshLambertMaterial({
     map: winTex, emissiveMap: winTex, emissive: new THREE.Color(def.theme === 'night' ? '#ffffff' : '#a08070'),
-    emissiveIntensity: def.theme === 'night' ? 1.0 : 0.55,
+    emissiveIntensity: def.theme === 'night' ? 1.0 : 0.8,
   }));
   // A few prototype boxes whose UVs tile the window texture at a sane scale.
   const protos = [
@@ -172,7 +172,7 @@ export function buildScenery(path, def, quality) {
     }
   }
   // Group placements into spatial chunks per prototype.
-  const chunkSize = 260;
+  const chunkSize = 380;
   const chunks = new Map();
   for (const p of placements) {
     const key = `${p[0]}_${Math.floor(p[1] / chunkSize)}_${Math.floor(p[2] / chunkSize)}`;

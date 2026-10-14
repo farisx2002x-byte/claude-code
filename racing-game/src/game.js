@@ -260,15 +260,18 @@ export class Game {
 
     const entrants = [];
     const rivalCount = mode === 'race' ? 5 : 0;
-    // Rivals pick cars around the player's class (fair fields).
+    // Rivals drive a mix of every car class. Rivals in a faster car than the
+    // player's get a pace handicap (and slower cars a small bonus) so the field
+    // stays fair whatever the player drives.
     const playerTier = CARS.indexOf(playerDef);
+    const upg = this.save.cars[playerDef.id].upgrades;
     for (let i = 0; i < rivalCount; i++) {
-      const tier = clamp(playerTier + [0, -1, 1, 0, -1][i], 0, CARS.length - 1);
+      const tier = (playerTier + 1 + i) % CARS.length;
       const rdef = CARS[tier];
-      const upg = this.save.cars[playerDef.id].upgrades;
+      const paceScale = Math.min(1.05, 1 - 0.035 * (tier - playerTier));
       // Rivals get roughly matching upgrades so upgrading doesn't trivialise races.
       const rUpg = { engine: Math.max(0, upg.engine - (i % 2)), grip: Math.max(0, upg.grip - 1), nitro: upg.nitro };
-      entrants.push({ def: rdef, upgrades: rUpg, paint: RIVAL_COLORS[i % RIVAL_COLORS.length], glow: rdef.body.glow, name: RIVAL_NAMES[(i + def.seed) % RIVAL_NAMES.length], ai: true });
+      entrants.push({ def: rdef, upgrades: rUpg, paceScale, paint: RIVAL_COLORS[i % RIVAL_COLORS.length], glow: rdef.body.glow, name: RIVAL_NAMES[(i + def.seed) % RIVAL_NAMES.length], ai: true });
     }
     // Player starts at the back-middle of the grid in races.
     const playerEntry = { def: playerDef, upgrades: pcfg.upgrades, paint: pcfg.paint, glow: pcfg.glow, rim: pcfg.rim, name: 'YOU', ai: false };
@@ -312,7 +315,7 @@ export class Game {
       sess.flames.push(flames);
       sess.emitters.push({ lx: null, lz: null, rx: null, rz: null });
       if (e.ai) {
-        sess.ais.push(new AIDriver(car, path, { difficulty, seed: def.seed + i * 31 }));
+        sess.ais.push(new AIDriver(car, path, { difficulty, seed: def.seed + i * 31, paceScale: e.paceScale ?? 1 }));
       } else {
         sess.ais.push(null);
         sess.player = car;
@@ -816,6 +819,9 @@ export class Game {
   }
 
   render() {
+    // Accumulate stats over all post-processing passes (for the FPS overlay / tests).
+    this.renderer.info.autoReset = false;
+    this.renderer.info.reset();
     if (this.composer) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
   }

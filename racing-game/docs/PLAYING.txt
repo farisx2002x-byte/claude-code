@@ -1,0 +1,71 @@
+NEON RUSH — arcade street racing
+================================
+
+HOW TO START (Windows 10 / 11, 64-bit)
+  1. Extract the whole NeonRush-win32-x64 folder (keep all files together).
+  2. Double-click NeonRush.exe.
+  No installation, no account and no internet connection needed.
+  Windows SmartScreen may warn because the exe is not code-signed:
+  click "More info" -> "Run anyway".
+
+CONTROLS (keyboard)
+  W / Up arrow ........ accelerate
+  S / Down arrow ...... brake (hold to reverse)
+  A D / Left Right .... steer
+  Space ............... handbrake / DRIFT (tap while turning, keep steering to hold the slide)
+  Shift / N ........... NITRO
+  R ................... reset car onto the track
+  C ................... camera: chase / far / hood
+  M ................... music on / off
+  Esc / P ............. pause menu
+  F11 ................. fullscreen
+  Menus: arrow keys + Enter, Esc = back. Mouse works too.
+
+GAMEPAD (optional, Xbox-style)
+  RT gas · LT brake · left stick steer · B or RB drift · A or X nitro
+  Y reset · Back camera · Start pause · D-pad/A/B in menus
+
+TIPS
+  * Drifting fills the nitro tank fast and scores drift points. Hitting a
+    wall or a car breaks the combo.
+  * Drive through every checkpoint gate; the next one glows.
+  * Finish in the top 3 on Neon Downtown to unlock Harbor Highway.
+    Winning a track unlocks its reverse layout.
+  * Credits buy new cars, wheels and performance upgrades in the Garage.
+
+SETTINGS
+  Main menu -> Settings: quality preset (Low / Medium / High), render scale,
+  window size (720p / 900p / 1080p), fullscreen, camera shake, speed effects,
+  field of view, volumes, difficulty, km/h or mph, FPS counter.
+  Slow PC? Choose "Low" and a render scale of 75% or 60%.
+
+APPROXIMATE REQUIREMENTS (not yet measured on real hardware — see docs)
+  Windows 10/11 64-bit, 4 GB RAM, ~400 MB disk,
+  GPU with DirectX 11 / WebGL 2 support (integrated graphics from ~2017 or newer
+  recommended). If the GPU driver is missing the game falls back to software
+  rendering, which works but is very slow.
+
+SAVE DATA
+  Progress and settings are stored locally in
+  %APPDATA%\NeonRush\  (delete that folder to reset everything,
+  or use Settings -> Reset progress).
+
+-----------------------------------------------------------------------
+نيون رَش — لعبة سباق شوارع أركيد
+
+التشغيل: فك ضغط مجلد NeonRush-win32-x64 بالكامل ثم شغّل NeonRush.exe.
+لا يحتاج تثبيتًا ولا حسابًا ولا اتصالًا بالإنترنت.
+إذا ظهر تحذير SmartScreen لأن الملف غير موقّع رقميًا: "More info" ثم "Run anyway".
+
+التحكم:
+  W أو السهم للأعلى: تسارع — S أو السهم للأسفل: فرامل/رجوع
+  A و D أو الأسهم: توجيه — Space: فرملة يد وتفحيط — Shift أو N: نيترو
+  R: إعادة السيارة إلى المسار — C: تغيير الكاميرا — M: الموسيقى
+  Esc أو P: إيقاف مؤقت — F11: ملء الشاشة
+  القوائم: الأسهم + Enter، و Esc للرجوع. تعمل الفأرة أيضًا.
+
+يد التحكم (اختيارية): RT تسارع، LT فرامل، العصا اليسرى توجيه، B أو RB تفحيط، A أو X نيترو، Y إعادة، Start إيقاف.
+
+الإعدادات من القائمة الرئيسية: جودة الرسومات (منخفضة/متوسطة/عالية)، دقة العرض، حجم النافذة، ملء الشاشة،
+اهتزاز الكاميرا، مؤثرات السرعة، مجال الرؤية، مستويات الصوت، الصعوبة، ووحدة السرعة.
+جهاز ضعيف؟ اختر "Low" ودقة عرض 75% أو 60%.

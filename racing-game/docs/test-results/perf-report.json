@@ -1,0 +1,80 @@
+{
+  "low/downtown": {
+    "logicAvgMs": 0.203,
+    "logicP95Ms": 0.4,
+    "logicMaxMs": 6.4,
+    "swRenderAvgMs": 189.9,
+    "drawCalls": 135,
+    "triangles": 28430,
+    "geometries": 86,
+    "textures": 16,
+    "jsHeapMB": 13.6,
+    "raceTime": 7,
+    "errors": 0
+  },
+  "low/harbor": {
+    "logicAvgMs": 0.234,
+    "logicP95Ms": 0.5,
+    "logicMaxMs": 4.3,
+    "swRenderAvgMs": 320.5,
+    "drawCalls": 144,
+    "triangles": 38252,
+    "geometries": 91,
+    "textures": 25,
+    "jsHeapMB": 11.3,
+    "raceTime": 7,
+    "errors": 0
+  },
+  "medium/downtown": {
+    "logicAvgMs": 0.266,
+    "logicP95Ms": 0.6,
+    "logicMaxMs": 6,
+    "swRenderAvgMs": 192.8,
+    "drawCalls": 157,
+    "triangles": 31826,
+    "geometries": 87,
+    "textures": 20,
+    "jsHeapMB": 12.8,
+    "raceTime": 7,
+    "errors": 0
+  },
+  "medium/harbor": {
+    "logicAvgMs": 0.329,
+    "logicP95Ms": 0.8,
+    "logicMaxMs": 5.9,
+    "swRenderAvgMs": 383.1,
+    "drawCalls": 179,
+    "triangles": 40482,
+    "geometries": 92,
+    "textures": 29,
+    "jsHeapMB": 12.1,
+    "raceTime": 7,
+    "errors": 0
+  },
+  "high/downtown": {
+    "logicAvgMs": 0.163,
+    "logicP95Ms": 0.5,
+    "logicMaxMs": 5.4,
+    "swRenderAvgMs": 1239.2,
+    "drawCalls": 227,
+    "triangles": 41428,
+    "geometries": 88,
+    "textures": 35,
+    "jsHeapMB": 12.8,
+    "raceTime": 7,
+    "errors": 0
+  },
+  "high/harbor": {
+    "logicAvgMs": 0.249,
+    "logicP95Ms": 0.6,
+    "logicMaxMs": 7.4,
+    "swRenderAvgMs": 708.1,
+    "drawCalls": 252,
+    "triangles": 49322,
+    "geometries": 93,
+    "textures": 46,
+    "jsHeapMB": 12.1,
+    "raceTime": 7,
+    "errors": 0
+  }
+}

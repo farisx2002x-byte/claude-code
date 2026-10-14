@@ -3,6 +3,7 @@
 // a value hasn't changed to keep the HUD essentially free.
 
 import { formatTime, KMH, MPH } from '../core/util.js';
+import { driftMedalTargets } from '../race/raceManager.js';
 
 const ORD = (n) => (n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th');
 
@@ -22,6 +23,7 @@ export class Hud {
         <div class="hud-sub" id="h-best"></div>
         <canvas id="minimap"></canvas>
       </div>
+      <div class="hud-banner" id="h-banner"></div>
       <div class="hud-center" id="h-center"></div>
       <div class="hud-bl">
         <div class="drift-box" id="h-drift"></div>
@@ -42,7 +44,7 @@ export class Hud {
         <div class="nitro-wrap"><span class="nitro-lbl">NITRO</span><div class="nitro-bar" id="h-nitro"><i></i></div></div>
       </div>`;
     this.el = {};
-    for (const id of ['fps', 'h-pos', 'h-lap', 'h-stand', 'h-time', 'h-lapt', 'h-best', 'h-center', 'h-drift', 'h-dtotal', 'h-rpm', 'h-gear', 'h-speed', 'h-unit', 'h-nitro', 'h-hint']) this.el[id] = root.querySelector('#' + id);
+    for (const id of ['fps', 'h-pos', 'h-lap', 'h-stand', 'h-time', 'h-lapt', 'h-best', 'h-center', 'h-drift', 'h-dtotal', 'h-rpm', 'h-gear', 'h-speed', 'h-unit', 'h-nitro', 'h-hint', 'h-banner']) this.el[id] = root.querySelector('#' + id);
     this.nitroFill = this.el['h-nitro'].querySelector('i');
     this.minimap = root.querySelector('#minimap');
     this.cache = {};
@@ -156,6 +158,14 @@ export class Hud {
     this.msgTimer = n > 0 ? 2 : 0.9;
   }
 
+  banner(text, seconds = 3) {
+    const b = this.el['h-banner'];
+    b.textContent = text;
+    b.classList.add('on');
+    clearTimeout(this.bannerT);
+    this.bannerT = setTimeout(() => b.classList.remove('on'), seconds * 1000);
+  }
+
   persistent(text) {
     // Used for "WRONG WAY": stays until cleared.
     const c = this.el['h-center'];
@@ -228,7 +238,10 @@ export class Hud {
       this.driftFlash -= dt;
       if (this.driftFlash <= 0) this.driftFlash = 0;
     }
-    if (sess.mode === 'drift' || sess.driftScore > 0) this.set('h-dtotal', `DRIFT SCORE ${sess.driftScore.toLocaleString('en-US')}`);
+    if (sess.mode === 'drift') {
+      const next = driftMedalTargets(race.track.length).find(([, v]) => sess.driftScore < v);
+      this.set('h-dtotal', `DRIFT SCORE ${sess.driftScore.toLocaleString('en-US')}${next ? ` · ${next[0]} AT ${next[1].toLocaleString('en-US')}` : ' · GOLD!'}`);
+    } else if (sess.driftScore > 0) this.set('h-dtotal', `DRIFT SCORE ${sess.driftScore.toLocaleString('en-US')}`);
     else this.set('h-dtotal', '');
 
     // Messages fade

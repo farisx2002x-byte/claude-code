@@ -12,6 +12,7 @@ rmSync(dist, { recursive: true, force: true });
 mkdirSync(dist, { recursive: true });
 cpSync(join(root, 'src/index.html'), join(dist, 'index.html'));
 cpSync(join(root, 'src/style.css'), join(dist, 'style.css'));
+cpSync(join(root, 'node_modules/three/LICENSE'), join(dist, 'THREE_LICENSE.txt'));
 
 const opts = {
   entryPoints: [join(root, 'src/main.js')],

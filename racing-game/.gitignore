@@ -3,3 +3,4 @@ dist/
 release/
 .cache/
 *.log
+test/e2e/out/

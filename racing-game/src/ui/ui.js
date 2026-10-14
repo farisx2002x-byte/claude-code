@@ -150,7 +150,8 @@ export class UI {
       this.hud.show(true);
       this.hud.prepareMinimap(g.world.path);
       const names = { race: 'STREET RACE', timetrial: 'TIME TRIAL', drift: 'DRIFT ATTACK' };
-      this.hud.flash(`${names[sess.mode]} · ${g.world.def.name}`, 'small', 2.4);
+      this.hud.banner(`${names[sess.mode]} · ${g.world.def.name}`, 3.2);
+      this.hud.countdown(3);
     });
     g.on('countdown', (n) => this.hud.countdown(n));
     g.on('checkpoint', (c) => this.hud.flash(`CHECKPOINT ${c.index} · ${formatTime(c.time)}`, 'small', 1.2));

@@ -240,10 +240,17 @@ export function computeRewards({ mode, position, racers, driftScore, bestLap, pr
   return { items, total };
 }
 
+export function driftMedalTargets(trackLength) {
+  const k = trackLength / 1600;
+  return [['BRONZE', Math.round(2500 * k)], ['SILVER', Math.round(6000 * k)], ['GOLD', Math.round(11000 * k)]];
+}
+
 export function driftMedal(score, trackLength) {
   const k = trackLength / 1600;
-  if (score >= 26000 * k) return 'GOLD';
-  if (score >= 15000 * k) return 'SILVER';
-  if (score >= 7000 * k) return 'BRONZE';
+  // Calibrated with a scripted driver that taps the handbrake into every corner
+  // (~3,000 points on Neon Downtown): that's bronze; long linked slides get gold.
+  if (score >= 11000 * k) return 'GOLD';
+  if (score >= 6000 * k) return 'SILVER';
+  if (score >= 2500 * k) return 'BRONZE';
   return null;
 }

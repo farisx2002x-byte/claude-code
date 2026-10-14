@@ -157,6 +157,30 @@ export function buildTrackMeshes(path, def, quality) {
       group.add(new THREE.Mesh(track(strip(path, () => [-hw - 0.5, hw + 0.5], () => [7.5, 7.5], { i0: a, i1: b })), roofMat));
       // outer shell so the tunnel looks solid from outside
       group.add(new THREE.Mesh(track(strip(path, () => [-hw - 3, hw + 3], () => [8.6, 8.6], { i0: a, i1: b })), roofMat));
+      // Portals at both ends so the tunnel reads clearly from a distance.
+      const portalMat = track(new THREE.MeshLambertMaterial({ color: 0x2a2c38 }));
+      const portalGlow = track(new THREE.MeshBasicMaterial({ color: theme.wallA }));
+      const pillarG = track(new THREE.BoxGeometry(1.6, 9.2, 1.6));
+      const beamG = track(new THREE.BoxGeometry(hw * 2 + 4.6, 1.6, 1.6));
+      const stripG = track(new THREE.BoxGeometry(hw * 2 + 4.6, 0.25, 1.7));
+      for (const idx of [a, b]) {
+        const f = path.frameAt(idx * path.spacing);
+        const portal = new THREE.Group();
+        portal.position.set(f.x, 0, f.z);
+        portal.rotation.y = f.heading;
+        for (const sx of [-1, 1]) {
+          const p = new THREE.Mesh(pillarG, portalMat);
+          p.position.set(sx * (hw + 1.5), 4.6, 0);
+          portal.add(p);
+        }
+        const beam = new THREE.Mesh(beamG, portalMat);
+        beam.position.y = 8.4;
+        const strip = new THREE.Mesh(stripG, portalGlow);
+        strip.position.y = 7.55;
+        strip.userData.bloom = true;
+        portal.add(beam, strip);
+        group.add(portal);
+      }
       const count = Math.ceil((((b - a + n) % n) * path.spacing) / 9);
       const lights = new THREE.InstancedMesh(lightGeo, lightMat, count);
       const m = new THREE.Matrix4();

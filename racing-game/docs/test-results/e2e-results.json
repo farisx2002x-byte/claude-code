@@ -1,0 +1,205 @@
+[
+  {
+    "name": "boots to the title menu without errors",
+    "ok": true,
+    "ms": 6658,
+    "info": {
+      "screen": "title",
+      "credits": "1,000 CR",
+      "webgl": true
+    }
+  },
+  {
+    "name": "keyboard navigation: arrows + Enter + Esc",
+    "ok": true,
+    "ms": 14960
+  },
+  {
+    "name": "settings: change preset, toggles and volume persist",
+    "ok": true,
+    "ms": 26846,
+    "info": {
+      "quality": "low->medium",
+      "showFps": true
+    }
+  },
+  {
+    "name": "locked tracks show requirements and cannot be selected",
+    "ok": true,
+    "ms": 13951
+  },
+  {
+    "name": "garage from event flow starts a street race with 6 cars",
+    "ok": true,
+    "ms": 26089,
+    "info": {
+      "state": "race",
+      "cars": 6,
+      "race": "countdown",
+      "hud": true
+    }
+  },
+  {
+    "name": "cars are held during the countdown, then GO",
+    "ok": true,
+    "ms": 19
+  },
+  {
+    "name": "keyboard driving: throttle accelerates the player car",
+    "ok": true,
+    "ms": 8661,
+    "info": {
+      "speedKmh": 116
+    }
+  },
+  {
+    "name": "nitro (Shift) boosts and drains the tank",
+    "ok": true,
+    "ms": 6063,
+    "info": {
+      "active": true,
+      "nitro": 70
+    }
+  },
+  {
+    "name": "drift (Space + steer) starts a slide",
+    "ok": true,
+    "ms": 7073,
+    "info": {
+      "drift": true,
+      "maxSlip": 0.49
+    }
+  },
+  {
+    "name": "R resets the car onto the track",
+    "ok": true,
+    "ms": 461
+  },
+  {
+    "name": "Esc pauses the race (simulation frozen) and Esc resumes",
+    "ok": true,
+    "ms": 10637
+  },
+  {
+    "name": "street race can be completed: results, positions, rewards",
+    "ok": true,
+    "ms": 14841,
+    "info": {
+      "position": 4,
+      "earned": 450
+    }
+  },
+  {
+    "name": "\"Race again\" restarts the same event cleanly",
+    "ok": true,
+    "ms": 2269
+  },
+  {
+    "name": "quit to menu from the pause menu (with confirm)",
+    "ok": true,
+    "ms": 10896
+  },
+  {
+    "name": "time trial: solo, best lap + ghost saved, ghost appears next time",
+    "ok": true,
+    "ms": 10781,
+    "info": {
+      "bestLap": 33.38,
+      "ghostFrames": 2001
+    }
+  },
+  {
+    "name": "drift attack: 2 laps, drift score + results",
+    "ok": true,
+    "ms": 6048,
+    "info": {
+      "mode": "drift",
+      "drift": 0
+    }
+  },
+  {
+    "name": "progression: podium unlocks Harbor Highway",
+    "ok": true,
+    "ms": 16877
+  },
+  {
+    "name": "garage: buy a car, paint it, buy an upgrade (credits spent, saved)",
+    "ok": true,
+    "ms": 20178,
+    "info": {
+      "credits": 2500
+    }
+  },
+  {
+    "name": "insufficient credits are refused with a message",
+    "ok": true,
+    "ms": 13
+  },
+  {
+    "name": "no runtime errors during the whole session",
+    "ok": true,
+    "ms": 0
+  },
+  {
+    "name": "quality preset \"low\" renders both tracks",
+    "ok": true,
+    "ms": 14034,
+    "info": {
+      "downtown": {
+        "drawCalls": 147,
+        "triangles": 27610,
+        "geometries": 78,
+        "textures": 13
+      },
+      "harbor": {
+        "drawCalls": 143,
+        "triangles": 37130,
+        "geometries": 79,
+        "textures": 24
+      }
+    }
+  },
+  {
+    "name": "quality preset \"medium\" renders both tracks",
+    "ok": true,
+    "ms": 24236,
+    "info": {
+      "downtown": {
+        "drawCalls": 167,
+        "triangles": 30754,
+        "geometries": 80,
+        "textures": 15
+      },
+      "harbor": {
+        "drawCalls": 182,
+        "triangles": 39696,
+        "geometries": 80,
+        "textures": 30
+      }
+    }
+  },
+  {
+    "name": "quality preset \"high\" renders both tracks",
+    "ok": true,
+    "ms": 30111,
+    "info": {
+      "downtown": {
+        "drawCalls": 235,
+        "triangles": 40556,
+        "geometries": 82,
+        "textures": 30
+      },
+      "harbor": {
+        "drawCalls": 252,
+        "triangles": 48452,
+        "geometries": 87,
+        "textures": 48
+      }
+    }
+  },
+  {
+    "name": "1080p layout renders HUD and menus",
+    "ok": true,
+    "ms": 38342
+  }
+]

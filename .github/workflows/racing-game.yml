@@ -1,0 +1,108 @@
+name: "Neon Rush (racing game) build"
+
+# Builds and tests the racing game in racing-game/ and produces the Windows
+# release (NeonRush.exe + runtime files) as a downloadable workflow artifact.
+# This workflow does not call Claude.
+
+on:
+  push:
+    paths:
+      - "racing-game/**"
+      - ".github/workflows/racing-game.yml"
+  pull_request:
+    paths:
+      - "racing-game/**"
+      - ".github/workflows/racing-game.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: racing-game
+
+jobs:
+  test:
+    name: Unit + browser e2e tests (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: racing-game/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+      - name: Unit tests (physics, tracks, AI races, race rules)
+        run: npm run test:unit
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser end-to-end tests
+        run: npm run test:e2e
+
+      - name: Upload e2e screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: e2e-screenshots
+          path: racing-game/test/e2e/out/
+          if-no-files-found: ignore
+
+  windows:
+    name: Windows x64 build + smoke test
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: racing-game/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Build and package NeonRush.exe
+        run: npm run package:win
+
+      - name: Smoke test the packaged exe (boots, starts a race)
+        run: node test/e2e/electron-smoke.mjs release/windows-smoke.png
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: NeonRush-win32-x64
+          path: racing-game/release/NeonRush-win32-x64/
+
+      - name: Upload smoke-test screenshot
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-smoke-screenshot
+          path: racing-game/release/windows-smoke.png
+          if-no-files-found: ignore

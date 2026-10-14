@@ -32,7 +32,7 @@ canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: blo
 .boot .logo .l2 { font-size: 78px; }
 
 /* ---------- Generic menu layout ---------- */
-.menu-screen { flex-direction: column; padding: calc(var(--u)*5) calc(var(--u)*7); background: linear-gradient(90deg, rgba(5,4,15,0.92) 0%, rgba(5,4,15,0.6) 45%, rgba(5,4,15,0) 75%); }
+.menu-screen { flex-direction: column; align-items: flex-start; padding: calc(var(--u)*5) calc(var(--u)*7); background: linear-gradient(90deg, rgba(5,4,15,0.92) 0%, rgba(5,4,15,0.6) 45%, rgba(5,4,15,0) 75%); }
 .menu-screen.full { background: rgba(5, 4, 15, 0.82); backdrop-filter: blur(3px); }
 .menu-title { font-style: italic; font-weight: 900; font-size: 2.4em; letter-spacing: 0.04em; margin: 0 0 0.4em; color: #fff; text-shadow: 0 0 12px var(--cyan); }
 .menu-title small { display: block; font-size: 0.38em; font-style: normal; font-weight: 600; letter-spacing: 0.3em; color: var(--cyan); text-shadow: none; }
@@ -154,6 +154,8 @@ kbd { display: inline-block; min-width: 1.8em; padding: 0.15em 0.5em; margin: 0 
 .drift-box small { display: block; font-size: 0.4em; letter-spacing: 0.35em; color: #fff; }
 .drift-total { font-weight: 800; font-size: 0.9em; color: var(--muted); }
 .ctrl-hint { font-style: normal; font-size: 0.6em; color: rgba(255,255,255,0.55); margin-top: 0.6em; }
+.hud-banner { position: absolute; left: 0; right: 0; top: calc(var(--u)*4); text-align: center; font-weight: 900; letter-spacing: 0.25em; font-size: 0.9em; color: var(--cyan); text-shadow: 0 0 10px var(--cyan); opacity: 0; transition: opacity 0.4s; }
+.hud-banner.on { opacity: 1; }
 .hud-center { position: absolute; left: 0; right: 0; top: 26%; text-align: center; }
 .big-msg { font-size: 7em; font-weight: 900; line-height: 1; text-shadow: 0 0 30px var(--pink), 0 0 60px var(--pink); animation: pop 0.5s ease-out; }
 .big-msg.go { color: var(--green); text-shadow: 0 0 30px var(--green); }
