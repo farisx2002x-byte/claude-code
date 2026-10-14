@@ -93,6 +93,7 @@ Environment: Linux container, Node 22, Chromium 141 headless with **software Web
 | E2E: browser | `npm run test:e2e` | 24 checks; see `test/e2e/run-e2e.mjs` and the list below |
 | E2E: packaged app | `npm run test:electron` | Packaged Electron app boots, native bridge present, race starts, window-mode IPC resizes to 1600×900, no errors |
 | Windows packaging | `npm run package:win` | Produces `NeonRush.exe` (PE32+ x86-64 GUI) with icon + version info, and the zip |
+| **Windows (GitHub Actions `windows-latest`)** | workflow `racing-game.yml` | Unit tests pass on Windows. `NeonRush.exe` is packaged on Windows, **launched there**, boots to the title screen, the native bridge works, a race starts, no errors (run #1, 14 Oct 2026). The build is uploaded as the `NeonRush-win32-x64` artifact |
 
 E2E checks cover: boot without errors; arrow/Enter/Esc navigation; settings persistence; locked-track handling; garage→race with 6 cars; cars held during the countdown; throttle; nitro; drift; `R` reset; pause freezes the simulation and resumes; **complete street race → results with 6 rows, 3 laps, credits earned**; "Race again"; quit with confirmation; time trial saving a best lap + ghost and loading the ghost next time; drift attack (2 laps) to results; podium unlocks Harbor Highway; buying a car, painting it, buying an upgrade (exact credit maths); disabled buy button without credits; Low/Medium/High presets rendering both tracks without errors; 1080p layout. Screenshots are written to `test/e2e/out/`.
 
@@ -112,7 +113,7 @@ E2E checks cover: boot without errors; arrow/Enter/Esc navigation; settings pers
 **Not measured: real frame rates.** The only renderer available here was a CPU software rasterizer (1–3 FPS, meaningless for GPU performance). The 60 FPS target on mid-range PCs and 30 FPS on weak ones are **design targets that still need to be measured on real Windows hardware**. The in-game FPS counter (Settings → Show FPS) shows FPS, draw calls and triangles for that purpose.
 
 ### Not tested
-- Running the **Windows `.exe` on real Windows** in this environment. The GitHub Actions workflow `racing-game.yml` builds it on `windows-latest` and runs the same packaged-app smoke test there.
+- Playing the Windows build by hand on a physical Windows PC. The CI smoke test launches the exe on a GPU-less Windows VM; it doesn't play a full race there.
 - Real-GPU frame rate and frame pacing (see above).
 - **Gamepad** input (no device available; the standard-mapping code path is implemented but unverified).
 - **Audio by ear.** The synth runs without errors, but nobody has listened to the mix yet.
