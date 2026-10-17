@@ -100,3 +100,32 @@ test('rewards scale with result and are never negative', () => {
   const easy = computeRewards({ mode: 'race', position: 1, racers: 6, driftScore: 0, cleanRace: false, difficulty: 'easy' });
   assert.ok(hard.total > easy.total);
 });
+
+test('countdown announces 3, 2, 1 then GO', () => {
+  const race = new RaceManager(makeTrack('downtown'), { laps: 1, countdown: 3 });
+  race.addRacer(makeCar(), { isPlayer: true });
+  race.setupGrid();
+  const seen = [];
+  for (let k = 0; k < 3.2 / DT; k++) {
+    race.update(DT);
+    for (const e of race.events) if (e.type === 'count' || e.type === 'go') seen.push(e.type === 'go' ? 'GO' : e.value);
+  }
+  assert.deepEqual(seen, [3, 2, 1, 'GO']);
+});
+
+test('racers finishing on the same step keep their crossing order', () => {
+  const race = new RaceManager(makeTrack('downtown'), { laps: 1, countdown: 0 });
+  const a = race.addRacer(makeCar(), { name: 'A' });
+  const b = race.addRacer(makeCar(), { name: 'B', isPlayer: true });
+  race.setupGrid();
+  // Same finish time, B crossed first.
+  for (const r of [b, a]) {
+    r.finished = true;
+    r.finishTime = 60;
+    race.finishOrder.push(r);
+  }
+  race.updatePositions();
+  assert.equal(b.position, 1);
+  assert.equal(a.position, 2);
+  assert.deepEqual(race.results().map((x) => x.racer.name), ['B', 'A']);
+});

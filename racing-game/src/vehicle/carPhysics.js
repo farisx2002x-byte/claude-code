@@ -95,6 +95,7 @@ export function stepCar(car, dt, track) {
   car.prevZ = car.z;
   car.prevYaw = car.yaw;
   car.wallHit = 0;
+  car.carHit = 0;
   if (car.ghostTimer > 0) car.ghostTimer -= dt;
 
   let fx = Math.sin(car.yaw), fz = Math.cos(car.yaw);
@@ -305,7 +306,6 @@ function collideWalls(car, track, dt) {
     // proportional to how hard the hit was (glancing hits barely slow you down).
     car.vx -= nx * vn * 1.2;
     car.vz -= nz * vn * 1.2;
-    const tx = car.vx * -nz + car.vz * nx; // along-wall component
     const loss = clamp(vn * 0.02, 0, 0.25);
     const keep = 1 - loss;
     car.vx *= keep;
@@ -315,7 +315,6 @@ function collideWalls(car, track, dt) {
     // Swing the nose to run along the barrier (whichever direction is closer to the
     // current heading) so the player is never left pointing into the wall.
     alignToWall(car, track, i, clamp(vn * 0.05, 0.25, 0.85));
-    void tx;
     if (car.drifting && vn > 1.5) endDrift(car, false);
   }
   // While scraping, keep turning the nose to follow the barrier so the car slides

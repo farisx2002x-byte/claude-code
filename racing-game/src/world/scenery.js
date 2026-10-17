@@ -261,6 +261,7 @@ export function buildScenery(path, def, quality) {
   return {
     group,
     sunLight: sun,
+    sunDir: new THREE.Vector3(...T.sunDir).normalize(),
     theme: T,
     update(dt) {
       t += dt;

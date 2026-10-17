@@ -145,7 +145,7 @@ export class Hud {
 
   flash(text, kind = '', duration = 1.6) {
     const c = this.el['h-center'];
-    if (this.centerKind === 'count') return;
+    if (this.centerKind === 'count' || this.centerKind === 'warn') return;
     c.innerHTML = `<div class="msg ${kind}">${text}</div>`;
     this.centerKind = 'msg';
     this.msgTimer = duration;

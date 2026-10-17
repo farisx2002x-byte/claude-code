@@ -189,6 +189,9 @@ export class UI {
       if ((e.code === 'Escape' || e.code === 'KeyP') && this.current === 'pause') {
         g.input.pressed.delete(e.code); // don't let the game re-pause on the same key press
         g.setPaused(false);
+      } else if ((e.code === 'Escape' || e.code === 'Backspace') && this.current === 'results' && !e.repeat) {
+        e.preventDefault();
+        this.screens.results.querySelector('[data-act=menu]')?.click();
       }
     });
   }
@@ -545,7 +548,10 @@ export class UI {
       this.game.updateSettings({ [key]: !s[key] });
       keep(`[data-toggle=${key}]`);
     }));
-    el.querySelectorAll('[data-range]').forEach((r) => (r.oninput = () => this.game.updateSettings({ [r.dataset.range]: Number(r.value) })));
+    el.querySelectorAll('[data-range]').forEach((r) => {
+      r.oninput = () => this.game.updateSettings({ [r.dataset.range]: Number(r.value) }, { live: true });
+      r.onchange = () => this.game.updateSettings({ [r.dataset.range]: Number(r.value) });
+    });
     el.querySelector('[data-act=back]').onclick = () => this.back();
     el.querySelector('[data-act=defaults]').onclick = () => {
       this.game.updateSettings({ ...DEFAULT_SETTINGS });

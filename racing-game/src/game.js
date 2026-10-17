@@ -30,6 +30,9 @@ const FIXED_DT = 1 / 120;
 const RIVAL_NAMES = ['VOLT', 'RAZOR', 'NOVA', 'ECHO', 'BLAZE', 'ONYX', 'VIPER', 'KOI', 'JINX', 'HALO'];
 const RIVAL_COLORS = ['#ff5252', '#39ff14', '#ffd23f', '#00bfa5', '#7a8cff', '#f5f5f5', '#ff8a1f', '#e040fb'];
 
+// Settings cheap enough to apply on every slider 'input' event.
+const LIVE_SETTINGS = new Set(['masterVolume', 'musicVolume', 'sfxVolume', 'fov']);
+
 export class Game {
   constructor(canvas) {
     this.canvas = canvas;
@@ -135,8 +138,16 @@ export class Game {
     this.composer.addPass(new OutputPass());
   }
 
-  updateSettings(patch) {
+  updateSettings(patch, { live = false } = {}) {
     Object.assign(this.settings, patch);
+    // Sliders (volumes, FOV) update live while dragging; the full apply rebuilds
+    // render targets and recompiles materials, so it only runs once on release.
+    if (live && Object.keys(patch).every((k) => LIVE_SETTINGS.has(k))) {
+      const s = this.settings;
+      this.audio.setVolumes(s.masterVolume, s.musicVolume, s.sfxVolume);
+      this.rig.baseFov = s.fov;
+      return;
+    }
     saveSettings(this.settings);
     this.applySettings();
     if (patch.resolution !== undefined || patch.fullscreen !== undefined) this.applyWindowMode();
@@ -509,7 +520,7 @@ export class Game {
     // Shadow camera follows the player.
     const sun = this.world.scenery.sunLight;
     if (sun.castShadow) {
-      const dir = sun.position.clone().normalize();
+      const dir = this.world.scenery.sunDir;
       sun.target.position.set(pc.x, 0, pc.z);
       sun.position.set(pc.x + dir.x * 100, dir.y * 100, pc.z + dir.z * 100);
     }
@@ -596,9 +607,6 @@ export class Game {
             this.rig.addShake(Math.min(1, e.value / 14));
             this.audio.impact(e.value);
             if (e.type === 'wall' && e.value > 4) s.wallHitsPlayer++;
-            if (s.mode === 'drift' && c.driftCombo > 0) {
-              /* combo lost via driftFail */
-            }
           } else if (near && e.value > 5) {
             this.audio.impact(e.value * 0.5);
           }
@@ -658,7 +666,7 @@ export class Game {
       const key = this.world.def.id;
       const prev = this.save.ghosts[key];
       const frames = s.ghostRec;
-      if (r.lap > 0 && (!prev || e.value < prev.lap) && frames.length > 30) {
+      if (r.lap > 1 && (!prev || e.value < prev.lap) && frames.length > 30) {
         this.save.ghosts[key] = { car: carById(this.lastEvent.carId || this.save.selectedCar).id, lap: e.value, frames };
         storeSave(this.save);
       }

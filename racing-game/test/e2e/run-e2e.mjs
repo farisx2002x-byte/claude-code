@@ -91,7 +91,7 @@ await step('settings: change preset, toggles and volume persist', async () => {
   await page.click('[data-set=quality][data-val=low]');
   await page.click('[data-toggle=showFps]');
   await page.click('[data-set=units][data-val=mph]');
-  await page.$eval('[data-range=musicVolume]', (el) => { el.value = '0.2'; el.dispatchEvent(new Event('input')); });
+  await page.$eval('[data-range=musicVolume]', (el) => { el.value = '0.2'; el.dispatchEvent(new Event('input')); el.dispatchEvent(new Event('change')); });
   await page.screenshot({ path: join(outDir, '03-settings.png') });
   const saved = await G(page, () => JSON.parse(localStorage.getItem('neonrush.settings.v1')));
   assert(saved.quality === 'low' && saved.showFps === true && saved.units === 'mph' && saved.musicVolume === 0.2, JSON.stringify(saved));
@@ -276,6 +276,11 @@ await step('drift attack: 2 laps, drift score + results', async () => {
   await page.screenshot({ path: join(outDir, '13-drift-results.png') });
   const r = await G(page, () => ({ mode: window.__neonRush.ui.lastResults.mode, drift: window.__neonRush.ui.lastResults.player.drift }));
   assert(r.mode === 'drift', JSON.stringify(r));
+  // Esc on the results screen returns to the main menu.
+  await page.keyboard.press('Escape');
+  await frames(page, 2);
+  const after = await G(page, () => ({ screen: window.__neonRush.ui.current, session: !!window.__neonRush.game.session }));
+  assert(after.screen === 'title' && !after.session, 'Esc on results: ' + JSON.stringify(after));
   return r;
 });
 

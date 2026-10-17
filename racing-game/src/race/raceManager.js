@@ -87,7 +87,9 @@ export class RaceManager {
   update(dt) {
     this.events.length = 0;
     if (this.state === 'countdown') {
-      const before = Math.ceil(this.countdown);
+      // The first step also announces the starting number (before = Infinity).
+      const before = this.countdownStarted ? Math.ceil(this.countdown) : Infinity;
+      this.countdownStarted = true;
       this.countdown -= dt;
       const after = Math.ceil(this.countdown);
       if (after !== before && after > 0) this.events.push({ type: 'count', value: after });
@@ -164,7 +166,7 @@ export class RaceManager {
 
   updatePositions() {
     const sorted = [...this.racers].sort((a, b) => {
-      if (a.finished && b.finished) return a.finishTime - b.finishTime;
+      if (a.finished && b.finished) return this.finishOrder.indexOf(a) - this.finishOrder.indexOf(b);
       if (a.finished) return -1;
       if (b.finished) return 1;
       return b.dist - a.dist;
@@ -215,7 +217,9 @@ export class RaceManager {
       time: this.estimateFinish(r),
       estimated: !r.finished,
     }));
-    list.sort((a, b) => a.time - b.time);
+    // Finishers keep their crossing order (several can share one step's time).
+    const fo = this.finishOrder;
+    list.sort((a, b) => (!a.estimated && !b.estimated ? fo.indexOf(a.racer) - fo.indexOf(b.racer) : a.time - b.time));
     return list;
   }
 }

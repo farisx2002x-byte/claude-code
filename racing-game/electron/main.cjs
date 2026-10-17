@@ -14,7 +14,10 @@ app.commandLine.appendSwitch('enable-unsafe-swiftshader');
 // Saves + settings live in %APPDATA%\NeonRush (fixed name, independent of exe name).
 app.setPath('userData', path.join(app.getPath('appData'), 'NeonRush'));
 
-if (!app.requestSingleInstanceLock()) app.quit();
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+  process.exit(0);
+}
 
 let win = null;
 
